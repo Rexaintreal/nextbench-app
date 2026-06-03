@@ -100,6 +100,21 @@ export async function addDocument<T extends Record<string, unknown>>(
 }
 
 /**
+ * Set a document with a specific ID.
+ */
+export async function setDocument<T extends Record<string, unknown>>(
+  collectionPath: string,
+  docId: string,
+  data: T
+): Promise<void> {
+  await getDocument(collectionPath, docId).set({
+    ...data,
+    createdAt: firestore.FieldValue.serverTimestamp(),
+    updatedAt: firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+/**
  * Update an existing document.
  */
 export async function updateDocument<T extends Record<string, unknown>>(

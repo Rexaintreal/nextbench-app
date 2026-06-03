@@ -8,9 +8,7 @@
 // Auth
 export {
   onAuthStateChanged,
-  signInWithEmail,
-  signUpWithEmail,
-  sendPasswordResetEmail,
+  signInWithGoogle,
   signOut,
   getCurrentUser,
   updateProfile,

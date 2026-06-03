@@ -37,7 +37,7 @@ SplashScreen.preventAutoHideAsync();
  * Must be inside AuthProvider to access useAuth().
  */
 function RootLayoutNav() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, userData, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -47,15 +47,16 @@ function RootLayoutNav() {
     if (isLoading) return; // Wait for auth to initialize
 
     const inAuthGroup = segments[0] === "(auth)";
+    const hasProfile = isAuthenticated && userData !== null;
 
-    if (!isAuthenticated && !inAuthGroup) {
-      // User is not signed in → redirect to login
+    if (!hasProfile && !inAuthGroup) {
+      // User is not signed in or missing profile → redirect to login
       router.replace("/(auth)/login");
-    } else if (isAuthenticated && inAuthGroup) {
-      // User is signed in but on auth screen → redirect to home
+    } else if (hasProfile && inAuthGroup) {
+      // User is signed in and has profile but on auth screen → redirect to home
       router.replace("/(tabs)");
     }
-  }, [isAuthenticated, isLoading, segments]);
+  }, [isAuthenticated, userData, isLoading, segments]);
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>

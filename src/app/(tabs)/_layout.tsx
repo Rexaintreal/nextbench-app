@@ -2,40 +2,40 @@
  * Tabs Layout
  *
  * Bottom tab navigator for the main app.
- * 5 tabs: Feed, Search, Create, Notifications, Profile
+ * 5 tabs: Home, Search, Create, Messages, Profile
  */
 
 import React from "react";
 import { Tabs } from "expo-router";
 import { useColorScheme } from "react-native";
 import { colors } from "@/constants/colors";
+import { Home, Search, PlusCircle, MessageSquare, User } from "lucide-react-native";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
+  
+  const iconColor = isDark ? "#FFFFFF" : "#1D1D1F";
+  const activeColor = "#0071E3"; // brand-teal
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.brand[500],
+        tabBarActiveTintColor: activeColor,
         tabBarInactiveTintColor: isDark
           ? colors.content.dark.tertiary
           : colors.content.light.tertiary,
         tabBarStyle: {
-          backgroundColor: isDark
-            ? colors.surface.dark.primary
-            : colors.surface.light.primary,
-          borderTopColor: isDark
-            ? colors.surface.dark.border
-            : colors.surface.light.border,
+          backgroundColor: isDark ? "#0D0F14" : "#F5F5F7",
+          borderTopColor: isDark ? "#1C2333" : "#E8E8EA",
           borderTopWidth: 0.5,
           paddingTop: 8,
           height: 88,
         },
         tabBarLabelStyle: {
           fontFamily: "Inter_500Medium",
-          fontSize: 11,
+          fontSize: 10,
           marginTop: 4,
         },
       }}
@@ -43,9 +43,11 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Feed",
-          tabBarLabel: "Feed",
-          // tabBarIcon will be added with proper icons in Phase 3
+          title: "Home",
+          tabBarLabel: "Home",
+          tabBarIcon: ({ focused }) => (
+            <Home size={22} color={focused ? activeColor : iconColor} strokeWidth={focused ? 2.5 : 1.5} />
+          )
         }}
       />
       <Tabs.Screen
@@ -53,20 +55,29 @@ export default function TabLayout() {
         options={{
           title: "Search",
           tabBarLabel: "Search",
+          tabBarIcon: ({ focused }) => (
+            <Search size={22} color={focused ? activeColor : iconColor} strokeWidth={focused ? 2.5 : 1.5} />
+          )
         }}
       />
       <Tabs.Screen
         name="create"
         options={{
-          title: "Create",
-          tabBarLabel: "Create",
+          title: "Sell",
+          tabBarLabel: "Sell",
+          tabBarIcon: ({ focused }) => (
+            <PlusCircle size={22} color={focused ? activeColor : iconColor} strokeWidth={focused ? 2.5 : 1.5} />
+          )
         }}
       />
       <Tabs.Screen
-        name="notifications"
+        name="messages"
         options={{
-          title: "Notifications",
-          tabBarLabel: "Alerts",
+          title: "Messages",
+          tabBarLabel: "Messages",
+          tabBarIcon: ({ focused }) => (
+            <MessageSquare size={22} color={focused ? activeColor : iconColor} strokeWidth={focused ? 2.5 : 1.5} />
+          )
         }}
       />
       <Tabs.Screen
@@ -74,6 +85,9 @@ export default function TabLayout() {
         options={{
           title: "Profile",
           tabBarLabel: "Profile",
+          tabBarIcon: ({ focused }) => (
+            <User size={22} color={focused ? activeColor : iconColor} strokeWidth={focused ? 2.5 : 1.5} />
+          )
         }}
       />
     </Tabs>

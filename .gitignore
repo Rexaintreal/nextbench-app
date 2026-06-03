@@ -47,9 +47,19 @@ yarn-error.*
 *.tsbuildinfo
 
 # Firebase config files (contain project secrets)
-# Uncomment these if you want to keep them out of the repo:
-# GoogleService-Info.plist
-# google-services.json
+GoogleService-Info.plist
+google-services.json
 
 # EAS
 .easignore
+
+# ──────────────────────────────────────
+# Agent / AI context (not for the repo)
+# ──────────────────────────────────────
+agent.md
+
+# Reference web repo clone (local-only context for migration)
+temp_web_repo/
+
+# Gemini / AI tool artifacts
+.gemini/

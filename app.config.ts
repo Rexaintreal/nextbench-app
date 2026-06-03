@@ -36,6 +36,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     "@react-native-firebase/app",
     "@react-native-firebase/auth",
+    "@react-native-google-signin/google-signin",
     [
       "expo-build-properties",
       {

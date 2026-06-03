@@ -2,10 +2,7 @@
  * Auth Provider
  *
  * Provides authentication state to the entire app via React Context.
- * Subscribes to Firebase onAuthStateChanged for real-time auth state.
- *
- * Usage in components:
- *   const { user, isLoading, isAuthenticated } = useAuth();
+ * Subscribes to Firebase onAuthStateChanged and Firestore user document.
  */
 
 import React, {
@@ -18,89 +15,115 @@ import React, {
 } from "react";
 import {
   onAuthStateChanged,
-  signInWithEmail,
-  signUpWithEmail,
+  signInWithGoogle as firebaseSignInWithGoogle,
   signOut as firebaseSignOut,
-  sendPasswordResetEmail,
   type FirebaseUser,
 } from "@/services/firebase/auth";
+import { getDocument, subscribeToDocument } from "@/services/firebase/firestore";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
-// ─── Types ──────────────────────────────────────────────────────────
+export interface UserData {
+  id: string;
+  name: string;
+  email: string;
+  school: string;
+  verified: boolean;
+  verificationStatus: "pending" | "approved" | "rejected";
+  reputation: number;
+  isAdmin: boolean;
+  profilePicture?: string | null;
+  idCardUrl?: string | null;
+  selfieUrl?: string | null;
+  about?: string | null;
+  username?: string | null;
+  city?: string;
+  createdAt: any;
+  updatedAt: any;
+}
+
 interface AuthContextValue {
   /** The current Firebase user, or null if not signed in */
   user: FirebaseUser | null;
-  /** True while the initial auth state is being determined */
+  /** The Firestore user document */
+  userData: UserData | null;
+  /** True while the initial auth state and doc is being determined */
   isLoading: boolean;
   /** Convenience: true if user is non-null */
   isAuthenticated: boolean;
-  /** Sign in with email/password */
-  signIn: (email: string, password: string) => Promise<void>;
-  /** Create a new account */
-  signUp: (email: string, password: string) => Promise<void>;
+  /** Sign in with Google */
+  signInWithGoogle: () => Promise<any>;
   /** Sign out */
   signOut: () => Promise<void>;
-  /** Send password reset email */
-  resetPassword: (email: string) => Promise<void>;
 }
 
-// ─── Context ────────────────────────────────────────────────────────
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-// ─── Provider ───────────────────────────────────────────────────────
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [userData, setUserData] = useState<UserData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Subscribe to auth state changes on mount
+  // Configure GoogleSignin on mount
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged((firebaseUser) => {
-      setUser(firebaseUser);
-      setIsLoading(false);
+    GoogleSignin.configure({
+      // We will need the actual Web Client ID, but leaving this for now.
+      webClientId: "159828236173-j7r70e6s9r6n6f7k7q6s2i8g3v6h7t5a.apps.googleusercontent.com",
     });
-
-    // Cleanup subscription on unmount
-    return unsubscribe;
   }, []);
 
-  // Auth actions
-  const signIn = async (email: string, password: string) => {
-    await signInWithEmail(email, password);
-  };
+  // Subscribe to auth state changes and Firestore document
+  useEffect(() => {
+    let unsubscribeDoc: (() => void) | undefined;
 
-  const signUp = async (email: string, password: string) => {
-    await signUpWithEmail(email, password);
+    const unsubscribeAuth = onAuthStateChanged((firebaseUser) => {
+      setUser(firebaseUser);
+
+      if (firebaseUser) {
+        // Subscribe to Firestore user doc
+        unsubscribeDoc = subscribeToDocument<UserData>(
+          "users",
+          firebaseUser.uid,
+          (doc) => {
+            setUserData(doc);
+            setIsLoading(false);
+          }
+        );
+      } else {
+        setUserData(null);
+        setIsLoading(false);
+        if (unsubscribeDoc) unsubscribeDoc();
+      }
+    });
+
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeDoc) unsubscribeDoc();
+    };
+  }, []);
+
+  const signInWithGoogle = async () => {
+    return firebaseSignInWithGoogle();
   };
 
   const signOut = async () => {
     await firebaseSignOut();
   };
 
-  const resetPassword = async (email: string) => {
-    await sendPasswordResetEmail(email);
-  };
-
-  // Memoize context value to prevent unnecessary re-renders
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
+      userData,
       isLoading,
       isAuthenticated: user !== null,
-      signIn,
-      signUp,
+      signInWithGoogle,
       signOut,
-      resetPassword,
     }),
-    [user, isLoading]
+    [user, userData, isLoading]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-// ─── Hook ───────────────────────────────────────────────────────────
-/**
- * Access auth state and actions.
- * Must be used within an AuthProvider.
- */
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (context === undefined) {

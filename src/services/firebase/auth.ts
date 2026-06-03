@@ -10,6 +10,7 @@
  */
 
 import auth, { FirebaseAuthTypes } from "@react-native-firebase/auth";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
 export type FirebaseUser = FirebaseAuthTypes.User;
 
@@ -24,36 +25,35 @@ export function onAuthStateChanged(
 }
 
 /**
- * Sign in with email and password.
+ * Sign in with Google.
+ * Uses @react-native-google-signin/google-signin to get an idToken,
+ * then authenticates with Firebase.
  */
-export async function signInWithEmail(
-  email: string,
-  password: string
-): Promise<FirebaseAuthTypes.UserCredential> {
-  return auth().signInWithEmailAndPassword(email, password);
-}
+export async function signInWithGoogle(): Promise<FirebaseAuthTypes.UserCredential> {
+  // Check if your device supports Google Play
+  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+  
+  // Get the users ID token
+  const signInResult = await GoogleSignin.signIn();
+  const idToken = signInResult.data?.idToken;
 
-/**
- * Create a new account with email and password.
- */
-export async function signUpWithEmail(
-  email: string,
-  password: string
-): Promise<FirebaseAuthTypes.UserCredential> {
-  return auth().createUserWithEmailAndPassword(email, password);
-}
+  if (!idToken) {
+    throw new Error("No ID token found");
+  }
 
-/**
- * Send a password reset email.
- */
-export async function sendPasswordResetEmail(email: string): Promise<void> {
-  return auth().sendPasswordResetEmail(email);
+  // Create a Google credential with the token
+  const googleCredential = auth.GoogleAuthProvider.credential(idToken);
+
+  // Sign-in the user with the credential
+  return auth().signInWithCredential(googleCredential);
 }
 
 /**
  * Sign out the current user.
+ * Signs out from both Google and Firebase to clear cache.
  */
 export async function signOut(): Promise<void> {
+  await GoogleSignin.signOut();
   return auth().signOut();
 }
 
@@ -76,15 +76,3 @@ export async function updateProfile(updates: {
   if (!user) throw new Error("No authenticated user");
   return user.updateProfile(updates);
 }
-
-// ------------------------------------------------------------------
-// Future: Google Sign In
-// ------------------------------------------------------------------
-// export async function signInWithGoogle(): Promise<FirebaseAuthTypes.UserCredential> {
-//   // 1. Get Google ID token via @react-native-google-signin
-//   // 2. Create a Firebase credential with it
-//   // 3. Sign in with credential
-//   // const { idToken } = await GoogleSignin.signIn();
-//   // const googleCredential = auth.GoogleAuthProvider.credential(idToken);
-//   // return auth().signInWithCredential(googleCredential);
-// }
