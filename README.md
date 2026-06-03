@@ -1,56 +1,141 @@
-# Welcome to your Expo app 👋
+# NextBench iOS
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Native iOS app for **NextBench** — the campus marketplace and social platform for college students.
 
-## Get started
+Buy, sell, post, and chat — all scoped to your campus.
 
-1. Install dependencies
+## Tech Stack
 
-   ```bash
-   npm install
-   ```
+| Layer | Technology |
+|---|---|
+| Framework | [Expo](https://expo.dev) SDK 52 (prebuild) |
+| Navigation | [Expo Router](https://docs.expo.dev/router/introduction/) (file-based) |
+| Styling | [NativeWind](https://www.nativewind.dev/) v4 (Tailwind CSS for React Native) |
+| Backend | [Firebase](https://firebase.google.com/) (Auth, Firestore, Storage) |
+| Firebase SDK | `@react-native-firebase/*` (native modules, not JS SDK) |
+| Auth | Google Sign-In via `@react-native-google-signin/google-signin` |
 
-2. Start the app
+## Features
 
-   ```bash
-   npx expo start
-   ```
+- 🏠 **Feed** — Mixed feed of marketplace products and social posts with a scoring algorithm (hype, recency, campus proximity)
+- 🔍 **Search** — Find products, posts, and users
+- ➕ **Create Listing** — Multi-image upload with camera/gallery picker
+- 💬 **Messaging** — Real-time 1:1 chat with image support
+- 👤 **Profile** — View your listings and posts
 
-In the output, you'll find options to open the app in a
+## Prerequisites
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- **Node.js** ≥ 18
+- **Xcode** ≥ 15 (with iOS Simulator)
+- **CocoaPods** (`sudo gem install cocoapods`)
+- A Firebase project with `GoogleService-Info.plist` (see [Setup](#setup))
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Setup
 
-## Get a fresh project
-
-When you're ready, run:
+### 1. Clone & install
 
 ```bash
-npm run reset-project
+git clone <your-repo-url>
+cd nextbench_ios
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Environment variables
 
-### Other setup steps
+Copy the example env file and fill in your values:
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```bash
+cp .env.example .env
+```
 
-## Learn more
+Required variables:
 
-To learn more about developing your project with Expo, look at the following resources:
+| Variable | Where to find it |
+|---|---|
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Firebase Console → Auth → Google provider → Web SDK config → Web client ID |
+| `EXPO_PUBLIC_EAS_PROJECT_ID` | Run `eas init` or find on [expo.dev](https://expo.dev) |
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### 3. Firebase config
 
-## Join the community
+Download `GoogleService-Info.plist` from [Firebase Console](https://console.firebase.google.com) → Project Settings → Your iOS App, and place it in the project root:
 
-Join our community of developers creating universal apps.
+```
+nextbench_ios/
+├── GoogleService-Info.plist   ← place here
+├── package.json
+└── ...
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+> ⚠️ This file is git-ignored. Every developer must download their own copy.
+
+### 4. Build & run
+
+```bash
+# Generate the native iOS project
+npx expo prebuild --clean
+
+# Run on iOS Simulator
+npx expo run:ios
+```
+
+> **Note:** This project uses native Firebase modules, so Expo Go will **not** work. You must use `npx expo run:ios` or an EAS development build.
+
+## Project Structure
+
+```
+src/
+├── app/                        # Expo Router — file-based routes
+│   ├── _layout.tsx             #   Root layout (providers, auth gate)
+│   ├── (auth)/                 #   Login & signup screens
+│   ├── (tabs)/                 #   Bottom tab navigator
+│   │   ├── index.tsx           #     Home / Feed
+│   │   ├── search.tsx          #     Search
+│   │   ├── create.tsx          #     Create listing
+│   │   ├── messages.tsx        #     Chat list
+│   │   └── profile.tsx         #     User profile
+│   ├── product/[id].tsx        #   Product detail (stack push)
+│   └── chat/[id].tsx           #   Chat room (stack push)
+├── components/ui/              # Reusable UI components
+│   ├── Text.tsx                #   Typography with variant system
+│   ├── Button.tsx              #   Styled button
+│   ├── Input.tsx               #   Form input
+│   ├── ProductCard.tsx         #   Marketplace item card
+│   └── PostCard.tsx            #   Social post card
+├── providers/
+│   └── AuthProvider.tsx        # Auth context (Firebase Auth + Firestore user doc)
+├── services/firebase/          # Native Firebase SDK wrappers
+│   ├── auth.ts                 #   Google Sign-In, sign out
+│   ├── firestore.ts            #   CRUD helpers
+│   └── storage.ts              #   Image upload
+├── constants/                  # Design tokens (colors, config)
+└── global.css                  # NativeWind base styles
+```
+
+## Firebase Collections
+
+| Collection | Purpose |
+|---|---|
+| `users` | User profiles (name, school, verification status) |
+| `products` | Marketplace listings |
+| `posts` | Social feed posts |
+| `chatRooms` | DM rooms (with `messages` sub-collection) |
+| `clubs` | Group chat clubs |
+| `notifications` | User notifications |
+| `upvotes` | Post upvote records |
+| `wishlists` | Product wishlist records |
+| `follows` | Follow relationships |
+| `blocks` | Block relationships |
+
+## Scripts
+
+```bash
+npm install              # Install dependencies
+npx expo prebuild        # Generate native projects
+npx expo run:ios         # Build & run on iOS Simulator
+npx expo run:ios -d      # Build & run on physical device
+npx expo start           # Start Metro bundler (for dev builds only)
+```
+
+## License
+
+See [LICENSE](./LICENSE).
