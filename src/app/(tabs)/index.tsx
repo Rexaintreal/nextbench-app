@@ -6,11 +6,10 @@ import { Text } from "@/components/ui/Text";
 import PostCard, { Post } from "@/components/ui/PostCard";
 import ProductCard, { Product } from "@/components/ui/ProductCard";
 import { useAuth } from "@/providers/AuthProvider";
-import { collection, query, where, onSnapshot, getDoc, doc } from "@react-native-firebase/firestore";
 import firestore from "@react-native-firebase/firestore";
 
 type FeedItem = 
-  | { type: 'post'; data: Post; timestamp: number }
+  | { type: 'post'; data: Post & { feedScore?: number }; timestamp: number }
   | { type: 'product'; data: Product; timestamp: number };
 
 export default function FeedScreen() {
@@ -31,82 +30,78 @@ export default function FeedScreen() {
 
   // Listen to approved posts
   useEffect(() => {
-    const q = query(
-      collection(firestore(), 'posts'),
-      where('status', '==', 'approved')
-    );
-
     const userCache: Record<string, any> = {};
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      if (!snapshot) return;
-      try {
-        const uncachedIds = new Set<string>();
-        snapshot.forEach(docSnap => {
-          const authorId = docSnap.data().authorId;
-          if (authorId && !userCache[authorId]) uncachedIds.add(authorId);
-        });
-
-        if (uncachedIds.size > 0) {
-          const promises = Array.from(uncachedIds).map(async (uid) => {
-            const uDoc = await getDoc(doc(firestore(), 'users', uid));
-            if (uDoc.exists) userCache[uid] = uDoc.data();
-            else userCache[uid] = {};
+    const unsubscribe = firestore()
+      .collection('posts')
+      .where('status', '==', 'approved')
+      .onSnapshot(async (snapshot) => {
+        if (!snapshot) return;
+        try {
+          const uncachedIds = new Set<string>();
+          snapshot.forEach(docSnap => {
+            const authorId = docSnap.data().authorId;
+            if (authorId && !userCache[authorId]) uncachedIds.add(authorId);
           });
-          await Promise.all(promises);
-        }
 
-        const fetchedPosts: Post[] = [];
-        snapshot.forEach(docSnap => {
-          const data = docSnap.data();
-          const authorData = userCache[data.authorId] || {};
-          
-          fetchedPosts.push({
-            id: docSnap.id,
-            ...data,
-            authorName: authorData.name || data.authorName || 'Unknown User',
-            authorProfilePicture: authorData.profilePicture || data.authorProfilePicture || null,
-            school: authorData.school || data.school || 'Unknown School',
-          } as Post);
-        });
-        setRawPosts(fetchedPosts);
-      } catch (err) {
-        console.error("Error fetching posts:", err);
-      } finally {
-        setLoadingPosts(false);
-      }
-    });
+          if (uncachedIds.size > 0) {
+            const promises = Array.from(uncachedIds).map(async (uid) => {
+              const uDoc = await firestore().collection('users').doc(uid).get();
+              if (uDoc.exists()) userCache[uid] = uDoc.data();
+              else userCache[uid] = {};
+            });
+            await Promise.all(promises);
+          }
+
+          const fetchedPosts: Post[] = [];
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            const authorData = userCache[data.authorId] || {};
+            
+            fetchedPosts.push({
+              id: docSnap.id,
+              ...data,
+              authorName: authorData.name || data.authorName || 'Unknown User',
+              authorProfilePicture: authorData.profilePicture || data.authorProfilePicture || null,
+              school: authorData.school || data.school || 'Unknown School',
+            } as Post);
+          });
+          setRawPosts(fetchedPosts);
+        } catch (err) {
+          console.error("Error fetching posts:", err);
+        } finally {
+          setLoadingPosts(false);
+        }
+      });
 
     return () => unsubscribe();
   }, []);
 
   // Listen to products
   useEffect(() => {
-    const q = query(
-      collection(firestore(), 'products'),
-      where('status', 'in', ['available', 'sold'])
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (!snapshot) return;
-      try {
-        const fetchedProducts: Product[] = [];
-        snapshot.forEach(docSnap => {
-          const data = docSnap.data();
-          fetchedProducts.push({
-            id: docSnap.id,
-            ...data,
-            sellerName: data.sellerName || 'Unknown User',
-            sellerSchool: data.sellerSchool || 'Unknown School',
-          } as Product);
-        });
-        setProducts(fetchedProducts);
-      } catch (err) {
-        console.error("Error fetching products:", err);
-      } finally {
-        setLoadingProducts(false);
-      }
-    });
+    const unsubscribe = firestore()
+      .collection('products')
+      .where('status', 'in', ['available', 'sold'])
+      .onSnapshot((snapshot) => {
+        if (!snapshot) return;
+        try {
+          const fetchedProducts: Product[] = [];
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            fetchedProducts.push({
+              id: docSnap.id,
+              ...data,
+              sellerName: data.sellerName || 'Unknown User',
+              sellerSchool: data.sellerSchool || 'Unknown School',
+            } as Product);
+          });
+          setProducts(fetchedProducts);
+        } catch (err) {
+          console.error("Error fetching products:", err);
+        } finally {
+          setLoadingProducts(false);
+        }
+      });
 
     return () => unsubscribe();
   }, []);
@@ -114,34 +109,38 @@ export default function FeedScreen() {
   // Listen to user's upvotes
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(firestore(), 'post_upvotes'), where('userId', '==', user.uid));
-    const unsub = onSnapshot(q, snap => {
-      if (!snap) return;
-      const ids = new Set<string>();
-      snap.forEach(d => ids.add(d.data().postId));
-      setUpvotedPostIds(ids);
-    });
+    const unsub = firestore()
+      .collection('post_upvotes')
+      .where('userId', '==', user.uid)
+      .onSnapshot(snap => {
+        if (!snap) return;
+        const ids = new Set<string>();
+        snap.forEach(d => ids.add(d.data().postId));
+        setUpvotedPostIds(ids);
+      });
     return () => unsub();
   }, [user]);
 
   // Listen to user's wishlists
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(firestore(), 'wishlists'), where('userId', '==', user.uid));
-    const unsub = onSnapshot(q, snap => {
-      if (!snap) return;
-      const ids = new Set<string>();
-      snap.forEach(d => ids.add(d.data().productId));
-      setWishlistedIds(ids);
-    });
+    const unsub = firestore()
+      .collection('wishlists')
+      .where('userId', '==', user.uid)
+      .onSnapshot(snap => {
+        if (!snap) return;
+        const ids = new Set<string>();
+        snap.forEach(d => ids.add(d.data().productId));
+        setWishlistedIds(ids);
+      });
     return () => unsub();
   }, [user]);
 
   // Feed scoring and mixing
   const feedItems = useMemo(() => {
     const now = Date.now();
-    const scoredPosts = rawPosts.map(post => {
-      const postTime = post.createdAt?.toMillis() || now;
+    const scoredPosts: FeedItem[] = rawPosts.map(post => {
+      const postTime = post.createdAt?.toMillis?.() || now;
       const hoursPassed = Math.max(0, (now - postTime) / (1000 * 60 * 60));
       const baseHype = ((post.upvotesCount || 0) * 2) + ((post.repliesCount || 0) * 3);
       const timePenalty = hoursPassed * 0.5;
@@ -152,8 +151,8 @@ export default function FeedScreen() {
       return { type: 'post' as const, data: { ...post, feedScore }, timestamp: postTime };
     });
 
-    const mappedProducts = products.map(product => {
-      const productTime = product.createdAt?.toMillis() || now;
+    const mappedProducts: FeedItem[] = products.map(product => {
+      const productTime = product.createdAt?.toMillis?.() || now;
       return { type: 'product' as const, data: product, timestamp: productTime };
     });
 
@@ -165,8 +164,8 @@ export default function FeedScreen() {
     } else if (contentType === 'posts') {
       mixed = scoredPosts;
       mixed.sort((a, b) => {
-        const scoreA = a.data.feedScore || 0;
-        const scoreB = b.data.feedScore || 0;
+        const scoreA = (a.data as Post & { feedScore?: number }).feedScore || 0;
+        const scoreB = (b.data as Post & { feedScore?: number }).feedScore || 0;
         if (scoreA !== scoreB) return scoreB - scoreA;
         return b.timestamp - a.timestamp;
       });

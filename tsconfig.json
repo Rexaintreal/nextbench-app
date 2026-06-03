@@ -7,11 +7,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@components/*": ["./src/components/*"],
-      "@features/*": ["./src/features/*"],
       "@services/*": ["./src/services/*"],
-      "@hooks/*": ["./src/hooks/*"],
       "@lib/*": ["./src/lib/*"],
-      "@types/*": ["./src/types/*"],
       "@constants/*": ["./src/constants/*"],
       "@utils/*": ["./src/utils/*"],
       "@providers/*": ["./src/providers/*"],
@@ -24,5 +21,9 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "nativewind-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "temp_web_repo"
   ]
 }

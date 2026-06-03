@@ -39,12 +39,12 @@ export default function ChatRoomScreen() {
     const fetchRoomInfo = async () => {
       try {
         const roomDoc = await firestore().collection('chatRooms').doc(roomId).get();
-        if (roomDoc.exists) {
+        if (roomDoc.exists()) {
           const data = roomDoc.data();
           const otherUserId = data?.participants?.find((p: string) => p !== user.uid);
           if (otherUserId) {
             const userDoc = await firestore().collection('users').doc(otherUserId).get();
-            if (userDoc.exists) {
+            if (userDoc.exists()) {
               setOtherUser({ id: otherUserId, ...userDoc.data() });
             }
           }

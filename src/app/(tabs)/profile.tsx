@@ -153,7 +153,7 @@ export default function ProfileScreen() {
                   key={item.id}
                   product={item}
                   isWishlisted={false}
-                  onPress={() => router.push(`/product/${item.id}`)}
+                  onPress={() => router.push(`/product/${item.id}` as any)}
                   onToggleWishlist={() => {}}
                 />
               ))

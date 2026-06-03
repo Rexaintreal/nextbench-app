@@ -50,7 +50,7 @@ export default function MessagesScreen() {
           if (uncachedUserIds.size > 0) {
             const fetchPromises = Array.from(uncachedUserIds).map(async (userId) => {
               const uDoc = await firestore().collection('users').doc(userId).get();
-              if (uDoc.exists) {
+              if (uDoc.exists()) {
                 userCache[userId] = { id: userId, ...uDoc.data() };
               } else {
                 userCache[userId] = { id: userId, name: 'Deleted User' };
@@ -64,7 +64,7 @@ export default function MessagesScreen() {
             const data = doc.data() as ChatRoom;
             const otherUserId = data.participants.find(id => id !== user.uid);
             if (otherUserId) {
-              rooms.push({ id: doc.id, ...data, otherUser: userCache[otherUserId] });
+              rooms.push({ ...data, id: doc.id, otherUser: userCache[otherUserId] });
             }
           });
 
@@ -93,7 +93,7 @@ export default function MessagesScreen() {
     return (
       <TouchableOpacity 
         onPress={() => {
-          router.push(`/chat/${item.id}`);
+          router.push(`/chat/${item.id}` as any);
         }}
         className="flex-row items-center py-3 px-5 border-b border-content-secondary/10 active:bg-surface-soft"
       >

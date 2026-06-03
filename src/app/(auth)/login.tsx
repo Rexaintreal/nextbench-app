@@ -78,7 +78,7 @@ export default function LoginScreen() {
               Create your verified student account to get started.
             </Text>
             <TouchableOpacity
-              onPress={() => router.push("/(auth)/signup")}
+              onPress={() => router.push("/(auth)/signup" as any)}
               className="w-full bg-brand-pink items-center justify-center py-4 rounded-xl shadow-lg shadow-brand-pink/10"
             >
               <Text variant="caption" className="text-white uppercase tracking-widest font-bold">
@@ -107,7 +107,7 @@ export default function LoginScreen() {
           <Text variant="caption" className="uppercase tracking-widest text-brand-teal/40 font-bold mr-1">
             New to Nextbench?
           </Text>
-          <TouchableOpacity onPress={() => router.push("/(auth)/signup")}>
+          <TouchableOpacity onPress={() => router.push("/(auth)/signup" as any)}>
             <Text variant="caption" className="uppercase tracking-widest text-brand-pink font-bold">
               Create Account
             </Text>

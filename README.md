@@ -17,11 +17,11 @@ Buy, sell, post, and chat — all scoped to your campus.
 
 ## Features
 
-- 🏠 **Feed** — Mixed feed of marketplace products and social posts with a scoring algorithm (hype, recency, campus proximity)
-- 🔍 **Search** — Find products, posts, and users
-- ➕ **Create Listing** — Multi-image upload with camera/gallery picker
-- 💬 **Messaging** — Real-time 1:1 chat with image support
-- 👤 **Profile** — View your listings and posts
+- **Feed** — Mixed feed of marketplace products and social posts with a scoring algorithm (hype, recency, campus proximity)
+-  **Search** — Find products, posts, and users
+-  **Create Listing** — Multi-image upload with camera/gallery picker
+-  **Messaging** — Real-time 1:1 chat with image support
+-  **Profile** — View your listings and posts
 
 ## Prerequisites
 
@@ -66,7 +66,7 @@ nextbench_ios/
 └── ...
 ```
 
-> ⚠️ This file is git-ignored. Every developer must download their own copy.
+> This file is git-ignored. Every developer must download their own copy.
 
 ### 4. Build & run
 

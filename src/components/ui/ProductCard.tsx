@@ -14,6 +14,8 @@ export interface Product {
   sellerId: string;
   sellerName: string;
   sellerSchool: string;
+  description?: string;
+  meetupAvailable?: boolean;
   city?: string;
   createdAt: any;
 }

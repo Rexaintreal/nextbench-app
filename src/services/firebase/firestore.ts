@@ -38,7 +38,7 @@ export async function fetchDocument<T>(
   docId: string
 ): Promise<(T & { id: string }) | null> {
   const doc: DocumentSnapshot = await getDocument(collectionPath, docId).get();
-  if (!doc.exists) return null;
+  if (!doc.exists()) return null;
   return { id: doc.id, ...(doc.data() as T) };
 }
 
@@ -148,7 +148,7 @@ export function subscribeToDocument<T>(
   callback: (data: (T & { id: string }) | null) => void
 ): () => void {
   return getDocument(collectionPath, docId).onSnapshot((doc) => {
-    if (!doc.exists) {
+    if (!doc.exists()) {
       callback(null);
       return;
     }
