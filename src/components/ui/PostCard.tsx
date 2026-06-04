@@ -73,7 +73,7 @@ export default function PostCard({ post, hasUpvoted, onPress, onUpvote }: PostCa
         >
           {!isAnonymous && post.authorProfilePicture ? (
             <Image
-              source={{ uri: post.authorProfilePicture }}
+              source={{ uri: post.authorProfilePicture || '' }}
               className="w-full h-full rounded-full"
             />
           ) : (
@@ -124,7 +124,7 @@ export default function PostCard({ post, hasUpvoted, onPress, onUpvote }: PostCa
       {hasImage && (
         <View className="w-full h-48 rounded-2xl overflow-hidden mb-5 bg-surface-base">
           <Image
-            source={{ uri: postImageUrls[0] }}
+            source={{ uri: postImageUrls[0] || '' }}
             className="w-full h-full"
             resizeMode="cover"
           />

@@ -71,7 +71,7 @@ export default function ProductCard({ product, isWishlisted, onPress, onToggleWi
       {/* Image Container */}
       <View className="relative w-full aspect-[4/3] bg-surface-base">
         <Image
-          source={{ uri: product.image }}
+          source={{ uri: product.image || '' }}
           className="w-full h-full"
           resizeMode="contain"
         />

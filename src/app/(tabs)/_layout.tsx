@@ -16,7 +16,7 @@ export default function TabLayout() {
   const isDark = colorScheme === "dark";
   
   const iconColor = isDark ? "#FFFFFF" : "#1D1D1F";
-  const activeColor = "#0071E3"; // brand-teal
+  const activeColor = isDark ? "#0A84FF" : "#0071E3"; // dynamic brand-teal
 
   return (
     <Tabs
@@ -27,8 +27,8 @@ export default function TabLayout() {
           ? colors.content.dark.tertiary
           : colors.content.light.tertiary,
         tabBarStyle: {
-          backgroundColor: isDark ? "#0D0F14" : "#F5F5F7",
-          borderTopColor: isDark ? "#1C2333" : "#E8E8EA",
+          backgroundColor: isDark ? "#08090A" : "#FFFFFF", // surface-base
+          borderTopColor: isDark ? "#121418" : "#F2F2F4",  // surface-soft
           borderTopWidth: 0.5,
           paddingTop: 8,
           height: 88,

@@ -15,6 +15,7 @@ module.exports = {
         brand: {
           teal: "var(--color-brand-teal)",
           pink: "var(--color-brand-pink)",
+          "pink-soft": "var(--color-brand-pink-soft)",
           mint: "var(--color-brand-mint)",
           500: "var(--color-brand-teal)", // fallback for existing stub
         },
@@ -26,6 +27,7 @@ module.exports = {
           card: "var(--color-surface-card)",
           elevated: "var(--color-surface-elevated)",
           border: "var(--color-border)",
+          "border-strong": "var(--color-border-strong)",
           secondary: "var(--color-surface-soft)",
           tertiary: "var(--color-surface-elevated)",
         },
@@ -34,6 +36,23 @@ module.exports = {
           secondary: "var(--color-surface-soft)",
           tertiary: "var(--color-surface-elevated)",
           border: "var(--color-border)",
+          "border-strong": "var(--color-border-strong)",
+        },
+        glass: {
+          bg: "var(--color-glass-bg)",
+          border: "var(--color-glass-border)",
+        },
+        skeleton: {
+          from: "var(--color-skeleton-from)",
+          via: "var(--color-skeleton-via)",
+        },
+        overlay: {
+          DEFAULT: "var(--color-overlay)",
+          heavy: "var(--color-overlay-heavy)",
+        },
+        confession: {
+          bg: "var(--color-confession-bg)",
+          hover: "var(--color-confession-bg-hover)",
         },
         // Semantic text colors
         content: {

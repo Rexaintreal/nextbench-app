@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { View, FlatList, ActivityIndicator, RefreshControl, TouchableOpacity } from "react-native";
+import { View, FlatList, ActivityIndicator, RefreshControl, TouchableOpacity, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Text } from "@/components/ui/Text";
@@ -160,18 +160,18 @@ export default function FeedScreen() {
 
     if (contentType === 'all') {
       mixed = [...scoredPosts, ...mappedProducts];
-      mixed.sort((a, b) => b.timestamp - a.timestamp);
+      mixed.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     } else if (contentType === 'posts') {
       mixed = scoredPosts;
       mixed.sort((a, b) => {
         const scoreA = (a.data as Post & { feedScore?: number }).feedScore || 0;
         const scoreB = (b.data as Post & { feedScore?: number }).feedScore || 0;
         if (scoreA !== scoreB) return scoreB - scoreA;
-        return b.timestamp - a.timestamp;
+        return (b.timestamp || 0) - (a.timestamp || 0);
       });
     } else if (contentType === 'marketplace') {
       mixed = mappedProducts;
-      mixed.sort((a, b) => b.timestamp - a.timestamp);
+      mixed.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     }
 
     return mixed;
@@ -217,9 +217,11 @@ export default function FeedScreen() {
   return (
     <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={['top']}>
       <View className="px-5 py-4 bg-surface/90">
-        <Text variant="h2" className="text-2xl font-serif-medium italic tracking-tight text-brand-teal mb-3">
-          Nextbench
-        </Text>
+        <Image 
+          source={require('../../../assets/images/logo.png')} 
+          className="h-8 w-40 mb-3"
+          resizeMode="contain"
+        />
         
         {/* Toggle Switch */}
         <View className="flex-row bg-surface-soft p-1 rounded-xl">

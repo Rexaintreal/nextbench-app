@@ -5,22 +5,22 @@
  * Subscribes to Firebase onAuthStateChanged and Firestore user document.
  */
 
-import React, {
+import {
+  signInWithGoogle as firebaseSignInWithGoogle,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+  type FirebaseUser,
+} from "@/services/firebase/auth";
+import { subscribeToDocument } from "@/services/firebase/firestore";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
+import {
   createContext,
   useContext,
   useEffect,
-  useState,
   useMemo,
+  useState,
   type ReactNode,
 } from "react";
-import {
-  onAuthStateChanged,
-  signInWithGoogle as firebaseSignInWithGoogle,
-  signOut as firebaseSignOut,
-  type FirebaseUser,
-} from "@/services/firebase/auth";
-import { getDocument, subscribeToDocument } from "@/services/firebase/firestore";
-import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
 export interface UserData {
   id: string;
@@ -67,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     GoogleSignin.configure({
       webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     });
   }, []);
 
