@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, TouchableOpacity, Image } from 'react-native';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { Heart, MessageCircle, Share2, Bookmark, Flame, ThumbsDown, Flag } from 'lucide-react-native';
 

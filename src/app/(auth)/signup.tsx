@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { View, TouchableOpacity, ActivityIndicator, Modal, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import { fetchCollection, fetchDocument, setDocument } from "@/services/firebase/firestore";
@@ -20,7 +20,6 @@ const FALLBACK_SCHOOLS = [
 
 export default function SignupScreen() {
   const { signInWithGoogle } = useAuth();
-  const router = useRouter();
   
   const [schools, setSchools] = useState<{name: string; city: string}[]>([]);
   const [selectedSchool, setSelectedSchool] = useState("");

@@ -18,7 +18,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
@@ -75,7 +75,6 @@ function Field({
 }
 
 export default function EditProfileScreen() {
-  const router = useRouter();
   const { user, userData } = useAuth();
   const { colorScheme } = useColorScheme();
   const iconColor = colorScheme === "dark" ? "#FFFFFF" : "#1D1D1F";

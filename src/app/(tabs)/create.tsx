@@ -3,7 +3,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import firestore from "@react-native-firebase/firestore";
 import storage from "@react-native-firebase/storage";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import { Upload, X, Check } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Image, ScrollView, TextInput, TouchableOpacity, View, useColorScheme } from "react-native";
@@ -13,7 +13,6 @@ const CATEGORIES = ['Books', 'Electronics', 'Stationery', 'Sports', 'Clothing', 
 const CONDITIONS = ['Like New', 'Good', 'Fair', 'Used'];
 
 export default function CreateScreen() {
-  const router = useRouter();
   const { user, userData } = useAuth();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';

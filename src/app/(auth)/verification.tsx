@@ -11,7 +11,6 @@ import { uploadToCloudinary } from '@/lib/storage';
 import { ArrowRight, CheckCircle, Camera, CreditCard, ShieldCheck } from 'lucide-react-native';
 
 export default function VerificationScreen() {
-  const router = useRouter();
   const { user, userData } = useAuth();
   
   const [step, setStep] = useState(1);

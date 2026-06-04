@@ -88,9 +88,12 @@ export function Button({
         ${variantClasses[variant]}
         ${sizeClasses[size]}
         ${fullWidth ? "w-full" : ""}
-        ${isDisabled ? "opacity-50" : ""}
         ${className}
       `}
+      style={[
+        isDisabled ? { opacity: 0.5 } : undefined,
+        style
+      ]}
       disabled={isDisabled}
       {...props}
     >

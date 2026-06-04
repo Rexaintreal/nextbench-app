@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { View, FlatList, RefreshControl, TouchableOpacity, Image, Alert, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import PostCard, { Post } from "@/components/ui/PostCard";
 import ProductCard, { Product } from "@/components/ui/ProductCard";
@@ -17,7 +17,6 @@ type FeedItem =
   | { type: 'product'; data: Product; timestamp: number };
 
 export default function FeedScreen() {
-  const router = useRouter();
   const { user, userData } = useAuth();
   
   const [loadingPosts, setLoadingPosts] = useState(true);
@@ -290,9 +289,20 @@ export default function FeedScreen() {
               onPress={() => setContentType(tab.key)}
               className={`flex-1 py-2 rounded-lg items-center ${
                 contentType === tab.key 
-                  ? 'bg-surface dark:bg-surface-elevated shadow-sm' 
+                  ? 'bg-surface dark:bg-surface-elevated' 
                   : ''
               }`}
+              style={
+                contentType === tab.key 
+                  ? {
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: 0.1,
+                      shadowRadius: 2,
+                      elevation: 2,
+                    }
+                  : undefined
+              }
             >
               <Text 
                 variant="label" 

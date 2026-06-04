@@ -20,7 +20,7 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import firestore from "@react-native-firebase/firestore";
@@ -62,7 +62,6 @@ function timeAgo(date: any): string {
 
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   const { user, userData } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
   const colorScheme = useColorScheme();

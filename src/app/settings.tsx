@@ -13,7 +13,7 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import {
@@ -79,7 +79,6 @@ function SettingsRow({
 }
 
 export default function SettingsScreen() {
-  const router = useRouter();
   const { userData } = useAuth();
   const { colorScheme, setColorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";

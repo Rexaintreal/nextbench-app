@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { View, FlatList, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Image, ImageBackground, useColorScheme, ActionSheetIOS, Alert, Modal, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import { ArrowLeft, Send, Image as ImageIcon, User, X, Reply, Forward, Trash } from "lucide-react-native";
@@ -103,7 +103,6 @@ const MessageItem = ({ item, user, handleMessageLongPress, setReplyingTo }: any)
 
 export default function ChatRoomScreen() {
   const { id: roomId } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   const { user, userData } = useAuth();
   const colorScheme = useColorScheme();
 

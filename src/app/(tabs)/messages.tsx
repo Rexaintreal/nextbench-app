@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { View, FlatList, ActivityIndicator, TouchableOpacity, Image, TextInput, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import { MessageSquare, Search, User } from "lucide-react-native";
@@ -36,7 +36,6 @@ function formatTime(timestamp: any): string {
 }
 
 export default function MessagesScreen() {
-  const router = useRouter();
   const { user } = useAuth();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';

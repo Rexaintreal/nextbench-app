@@ -17,7 +17,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import {
@@ -42,7 +42,6 @@ import ReportModal from "@/components/ui/ReportModal";
 
 export default function OtherProfileScreen() {
   const { id: profileId } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   const { user, userData: myData } = useAuth();
 
   const [profileData, setProfileData] = useState<any>(null);

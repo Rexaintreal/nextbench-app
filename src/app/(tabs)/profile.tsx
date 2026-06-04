@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { View, ScrollView, TouchableOpacity, Image, ActivityIndicator, useColorScheme, Modal } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import { Settings, ShieldCheck, MapPin, Grid, MessageSquare, Bell, Heart, X } from "lucide-react-native";
@@ -11,7 +11,6 @@ import PostCard, { Post } from "@/components/ui/PostCard";
 import { useFollowCounts } from "@/lib/follows";
 
 export default function ProfileScreen() {
-  const router = useRouter();
   const { user, userData } = useAuth();
   const [viewMode, setViewMode] = useState<'listings' | 'posts'>('listings');
   const colorScheme = useColorScheme();
@@ -206,7 +205,7 @@ export default function ProfileScreen() {
           <TouchableOpacity 
             onPress={() => setViewMode('listings')}
             className={`flex-1 flex-row items-center justify-center py-2.5 rounded-lg gap-2 ${
-              viewMode === 'listings' ? 'bg-surface dark:bg-surface-elevated shadow-sm' : ''
+              viewMode === 'listings' ? 'bg-surface dark:bg-surface-elevated' : ''
             }`}
           >
             <Grid size={16} color={viewMode === 'listings' ? (isDark ? '#0A84FF' : '#0071E3') : '#8E8E93'} />
@@ -217,7 +216,7 @@ export default function ProfileScreen() {
           <TouchableOpacity 
             onPress={() => setViewMode('posts')}
             className={`flex-1 flex-row items-center justify-center py-2.5 rounded-lg gap-2 ${
-              viewMode === 'posts' ? 'bg-surface dark:bg-surface-elevated shadow-sm' : ''
+              viewMode === 'posts' ? 'bg-surface dark:bg-surface-elevated' : ''
             }`}
           >
             <MessageSquare size={16} color={viewMode === 'posts' ? '#FF375F' : '#8E8E93'} />

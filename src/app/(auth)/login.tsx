@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { View, TouchableOpacity, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import { fetchDocument } from "@/services/firebase/firestore";
@@ -9,7 +9,6 @@ import { getAuthErrorMessage } from "@/utils/firebaseErrors";
 
 export default function LoginScreen() {
   const { signInWithGoogle, signOut } = useAuth();
-  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);

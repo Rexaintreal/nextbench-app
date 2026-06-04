@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, TouchableOpacity, Image } from 'react-native';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { Heart, MapPin, Tag } from 'lucide-react-native';
 
@@ -38,7 +38,8 @@ export default function ProductCard({ product, isWishlisted, onPress, onToggleWi
       activeOpacity={0.92}
       onPress={onPress}
       disabled={isSold}
-      className={`px-5 py-5 ${isSold ? 'opacity-60' : ''}`}
+      className={`px-5 py-5`}
+      style={isSold ? { opacity: 0.6 } : undefined}
     >
       {/* Header */}
       <TouchableOpacity

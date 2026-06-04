@@ -17,7 +17,7 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import {
@@ -50,7 +50,6 @@ interface WishlistItem {
 
 export default function WishlistScreen() {
   const { user } = useAuth();
-  const router = useRouter();
   const [items, setItems] = useState<WishlistItem[]>([]);
   const [loading, setLoading] = useState(true);
 

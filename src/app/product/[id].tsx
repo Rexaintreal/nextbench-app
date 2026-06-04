@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { View, ScrollView, ActivityIndicator, Image, TouchableOpacity, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { ChevronLeft, MapPin, Heart, Share2, ShieldCheck, Tag } from "lucide-react-native";
 import { useAuth } from "@/providers/AuthProvider";
@@ -12,7 +12,6 @@ import { toggleWishlist, getOrCreateDMRoom } from "@/lib/social";
 
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   const { user } = useAuth();
   
   const [product, setProduct] = useState<Product | null>(null);
