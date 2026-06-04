@@ -295,7 +295,7 @@ export default function PostCreateScreen() {
           >
             <ImagePlus
               size={24}
-              color={images.length >= 4 ? "#D1D5DB" : "#0071E3"}
+              color={images.length >= 4 ? "#D1D5DB" : "#14B8A6"}
             />
           </TouchableOpacity>
           <View className="flex-1" />

@@ -27,7 +27,7 @@ export default function ProductDetailScreen() {
       .collection('products')
       .doc(id)
       .onSnapshot((docSnap) => {
-        if (docSnap.exists()) {
+        if (docSnap.data()) {
           setProduct({ id: docSnap.id, ...docSnap.data() } as Product);
         }
         setLoading(false);

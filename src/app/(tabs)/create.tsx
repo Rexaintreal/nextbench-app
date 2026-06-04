@@ -4,14 +4,19 @@ import firestore from "@react-native-firebase/firestore";
 import storage from "@react-native-firebase/storage";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { Upload, X } from "lucide-react-native";
+import { Upload, X, Check } from "lucide-react-native";
 import { useState } from "react";
-import { ActivityIndicator, Image, ScrollView, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Image, ScrollView, TextInput, TouchableOpacity, View, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+const CATEGORIES = ['Books', 'Electronics', 'Stationery', 'Sports', 'Clothing', 'Other'];
+const CONDITIONS = ['Like New', 'Good', 'Fair', 'Used'];
 
 export default function CreateScreen() {
   const router = useRouter();
   const { user, userData } = useAuth();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [title, setTitle] = useState("");
@@ -106,38 +111,39 @@ export default function CreateScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={['top']}>
-      <View className="px-5 py-4 border-b border-brand-teal/5 bg-surface/90">
-        <Text variant="h2" className="text-2xl font-serif-medium text-brand-teal">
-          List Your Asset
+      <View className="px-5 py-3 border-b border-surface-soft dark:border-surface-dark-secondary">
+        <Text variant="h2" className="text-[22px]">
+          List Your Item
         </Text>
       </View>
 
-      <ScrollView className="flex-1 px-5 pt-4" contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView className="flex-1 px-5 pt-4" contentContainerStyle={{ paddingBottom: 120 }}>
 
         {/* Images */}
-        <View className="mb-6">
-          <Text variant="label" className="font-bold text-content-secondary uppercase tracking-widest text-[10px] mb-2">
-            Images ({images.length}/5)
+        <View className="mb-5">
+          <Text variant="caption" className="text-content-tertiary font-sans-semibold uppercase tracking-widest text-[11px] mb-2">
+            Photos ({images.length}/5)
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
             {images.map((uri, idx) => (
-              <View key={idx} className="w-24 h-24 mr-3 rounded-xl overflow-hidden relative">
+              <View key={idx} className="w-[80px] h-[80px] mr-2.5 rounded-xl overflow-hidden relative">
                 <Image source={{ uri }} className="w-full h-full" resizeMode="cover" />
                 <TouchableOpacity
                   onPress={() => removeImage(idx)}
-                  className="absolute top-1 right-1 bg-black/50 p-1 rounded-full"
+                  className="absolute top-1.5 right-1.5 bg-black/60 p-1 rounded-full"
                 >
-                  <X size={12} color="#FFF" />
+                  <X size={11} color="#FFF" />
                 </TouchableOpacity>
               </View>
             ))}
             {images.length < 5 && (
               <TouchableOpacity
                 onPress={pickImages}
-                className="w-24 h-24 rounded-xl border border-dashed border-content-secondary/30 items-center justify-center bg-surface-base"
+                className="w-[80px] h-[80px] rounded-xl border border-dashed items-center justify-center bg-surface-soft dark:bg-surface-dark-secondary"
+                style={{ borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)' }}
               >
-                <Upload size={24} color="#8E8E93" />
-                <Text variant="caption" className="mt-1 text-content-secondary text-[10px]">Add</Text>
+                <Upload size={20} color="#8E8E93" />
+                <Text variant="caption" className="mt-1 text-content-tertiary text-[10px]">Add</Text>
               </TouchableOpacity>
             )}
           </ScrollView>
@@ -145,21 +151,21 @@ export default function CreateScreen() {
 
         {/* Title */}
         <View className="mb-4">
-          <Text variant="label" className="font-bold text-content-secondary uppercase tracking-widest text-[10px] mb-1">
-            Item Title
+          <Text variant="caption" className="text-content-tertiary font-sans-semibold uppercase tracking-widest text-[11px] mb-1.5">
+            Title
           </Text>
           <TextInput
             value={title}
             onChangeText={setTitle}
             placeholder="e.g., HC Verma Vol 1"
-            className="bg-surface-base border border-brand-teal/5 rounded-xl px-4 py-3 font-medium text-content"
+            className="bg-surface-soft dark:bg-surface-dark-secondary rounded-xl px-4 py-3 text-[16px] text-content dark:text-content-dark"
             placeholderTextColor="#8E8E93"
           />
         </View>
 
         {/* Price */}
         <View className="mb-4">
-          <Text variant="label" className="font-bold text-content-secondary uppercase tracking-widest text-[10px] mb-1">
+          <Text variant="caption" className="text-content-tertiary font-sans-semibold uppercase tracking-widest text-[11px] mb-1.5">
             Price (₹)
           </Text>
           <TextInput
@@ -167,14 +173,67 @@ export default function CreateScreen() {
             onChangeText={setPrice}
             placeholder="500"
             keyboardType="numeric"
-            className="bg-surface-base border border-brand-teal/5 rounded-xl px-4 py-3 font-medium text-content"
+            className="bg-surface-soft dark:bg-surface-dark-secondary rounded-xl px-4 py-3 text-[16px] text-content dark:text-content-dark"
             placeholderTextColor="#8E8E93"
           />
         </View>
 
+        {/* Category Pills */}
+        <View className="mb-4">
+          <Text variant="caption" className="text-content-tertiary font-sans-semibold uppercase tracking-widest text-[11px] mb-2">
+            Category
+          </Text>
+          <View className="flex-row flex-wrap gap-2">
+            {CATEGORIES.map(cat => (
+              <TouchableOpacity
+                key={cat}
+                onPress={() => setCategory(cat)}
+                className={`px-3.5 py-2 rounded-lg flex-row items-center ${
+                  category === cat 
+                    ? 'bg-brand-teal' 
+                    : 'bg-surface-soft dark:bg-surface-dark-secondary'
+                }`}
+              >
+                {category === cat && <Check size={13} color="#FFF" className="mr-1" />}
+                <Text variant="caption" className={`text-[13px] font-sans-medium ${
+                  category === cat ? 'text-white' : 'text-content-secondary'
+                }`}>
+                  {cat}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Condition Pills */}
+        <View className="mb-4">
+          <Text variant="caption" className="text-content-tertiary font-sans-semibold uppercase tracking-widest text-[11px] mb-2">
+            Condition
+          </Text>
+          <View className="flex-row flex-wrap gap-2">
+            {CONDITIONS.map(cond => (
+              <TouchableOpacity
+                key={cond}
+                onPress={() => setCondition(cond)}
+                className={`px-3.5 py-2 rounded-lg ${
+                  condition === cond 
+                    ? 'bg-brand-teal' 
+                    : 'bg-surface-soft dark:bg-surface-dark-secondary'
+                }`}
+              >
+                <Text variant="caption" className={`text-[13px] font-sans-medium ${
+                  condition === cond ? 'text-white' : 'text-content-secondary'
+                }`}>
+                  {cond}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         {/* Description */}
         <View className="mb-6">
-          <Text variant="label" className="font-bold text-content-secondary uppercase tracking-widest text-[10px] mb-1">
+          <Text variant="caption" className="text-content-tertiary font-sans-semibold uppercase tracking-widest text-[11px] mb-1.5">
             Description
           </Text>
           <TextInput
@@ -183,7 +242,7 @@ export default function CreateScreen() {
             placeholder="Describe the condition, history..."
             multiline
             numberOfLines={4}
-            className="bg-surface-base border border-brand-teal/5 rounded-xl px-4 py-3 font-medium text-content h-24"
+            className="bg-surface-soft dark:bg-surface-dark-secondary rounded-xl px-4 py-3 text-[16px] text-content dark:text-content-dark h-24"
             textAlignVertical="top"
             placeholderTextColor="#8E8E93"
           />
@@ -192,12 +251,18 @@ export default function CreateScreen() {
         <TouchableOpacity
           onPress={handleSubmit}
           disabled={isSubmitting}
-          className="bg-brand-teal w-full py-4 rounded-xl items-center flex-row justify-center shadow-lg shadow-brand-teal/20"
+          className="bg-brand-teal w-full py-4 rounded-xl items-center flex-row justify-center"
+          style={{
+            shadowColor: '#14B8A6',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 12,
+          }}
         >
           {isSubmitting ? (
             <ActivityIndicator color="#FFF" size="small" />
           ) : (
-            <Text variant="label" className="text-white font-bold uppercase tracking-[0.2em]">
+            <Text variant="label" className="text-white font-sans-semibold">
               Submit Listing
             </Text>
           )}

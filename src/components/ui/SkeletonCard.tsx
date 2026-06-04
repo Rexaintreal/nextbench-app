@@ -40,28 +40,28 @@ function SkeletonBlock({ className = "" }: { className?: string }) {
 
 export function SkeletonPostCard() {
   return (
-    <View className="py-6 px-5 border-b border-content-secondary/10">
-      {/* Title skeleton */}
-      <SkeletonBlock className="h-5 w-3/4 mb-4" />
-
+    <View className="py-5 px-5 border-b border-surface-soft dark:border-surface-dark-secondary">
       {/* Author row skeleton */}
-      <View className="flex-row items-center mb-4">
+      <View className="flex-row items-center mb-3">
         <SkeletonBlock className="w-10 h-10 rounded-full mr-3" />
         <View className="flex-1">
           <SkeletonBlock className="h-3.5 w-1/3 mb-2" />
           <SkeletonBlock className="h-3 w-1/2" />
         </View>
-        <SkeletonBlock className="h-6 w-16 rounded" />
+        <SkeletonBlock className="h-6 w-16 rounded-md" />
       </View>
 
+      {/* Title skeleton */}
+      <SkeletonBlock className="h-4.5 w-3/4 mb-2" />
+
       {/* Content lines skeleton */}
-      <SkeletonBlock className="h-3.5 w-full mb-2.5" />
-      <SkeletonBlock className="h-3.5 w-full mb-2.5" />
-      <SkeletonBlock className="h-3.5 w-5/6 mb-2.5" />
-      <SkeletonBlock className="h-3.5 w-2/3 mb-5" />
+      <SkeletonBlock className="h-3.5 w-full mb-2" />
+      <SkeletonBlock className="h-3.5 w-full mb-2" />
+      <SkeletonBlock className="h-3.5 w-5/6 mb-2" />
+      <SkeletonBlock className="h-3.5 w-2/3 mb-3" />
 
       {/* Action bar skeleton */}
-      <View className="flex-row items-center gap-6 pt-2">
+      <View className="flex-row items-center gap-5 pt-2">
         <SkeletonBlock className="h-5 w-12" />
         <SkeletonBlock className="h-5 w-12" />
         <SkeletonBlock className="h-5 w-8" />
@@ -72,10 +72,10 @@ export function SkeletonPostCard() {
 
 export function SkeletonProductCard() {
   return (
-    <View className="py-6 px-5 border-b border-content-secondary/10">
+    <View className="py-5 px-5 border-b border-surface-soft dark:border-surface-dark-secondary">
       {/* Header row */}
-      <View className="flex-row items-center mb-4">
-        <SkeletonBlock className="w-9 h-9 rounded-full mr-3" />
+      <View className="flex-row items-center mb-3">
+        <SkeletonBlock className="w-10 h-10 rounded-full mr-3" />
         <View className="flex-1">
           <SkeletonBlock className="h-3.5 w-1/4 mb-2" />
           <SkeletonBlock className="h-3 w-1/3" />
@@ -84,15 +84,15 @@ export function SkeletonProductCard() {
       </View>
 
       {/* Title */}
-      <SkeletonBlock className="h-4 w-2/3 mb-4" />
+      <SkeletonBlock className="h-4 w-2/3 mb-3" />
 
       {/* Image */}
-      <SkeletonBlock className="w-full aspect-[4/3] rounded-2xl mb-4" />
+      <SkeletonBlock className="w-full aspect-[4/3] rounded-xl mb-3" />
 
       {/* Footer */}
       <View className="flex-row items-center justify-between">
         <SkeletonBlock className="h-3.5 w-20" />
-        <SkeletonBlock className="h-8 w-16 rounded-xl" />
+        <SkeletonBlock className="h-9 w-16 rounded-xl" />
       </View>
     </View>
   );

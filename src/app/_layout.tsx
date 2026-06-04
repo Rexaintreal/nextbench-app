@@ -15,7 +15,7 @@ import "../global.css";
 
 import React, { useEffect } from "react";
 import { useColorScheme } from "react-native";
-import { Slot, useRouter, useSegments, ThemeProvider, DarkTheme, DefaultTheme } from "expo-router";
+import { Stack, useRouter, useSegments, ThemeProvider, DarkTheme, DefaultTheme } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
@@ -88,7 +88,7 @@ function RootLayoutNav() {
 
       try {
         const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-        if (!projectId) return;
+        if (!projectId || !user) return;
         const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
         // Store push token in Firestore
         await firestore().collection('users').doc(user.uid).update({
@@ -104,7 +104,7 @@ function RootLayoutNav() {
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Slot />
+      <Stack screenOptions={{ headerShown: false }} />
       <StatusBar style="auto" />
     </ThemeProvider>
   );

@@ -2,11 +2,11 @@
  * Post Detail Screen
  *
  * Shows a full post with all content (not truncated),
- * author info, images, and a comments section.
- * Comments are loaded from posts/{id}/replies in real-time.
+ * author info, images, and a nested comments section.
+ * Comments are loaded from post_replies in real-time.
  */
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
   ScrollView,
@@ -16,6 +16,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  useColorScheme,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -28,7 +30,7 @@ import {
   MessageCircle,
   Share2,
   Send,
-  Flame,
+  X,
 } from "lucide-react-native";
 import { toggleUpvote } from "@/lib/social";
 
@@ -38,6 +40,9 @@ interface Reply {
   authorName: string;
   authorProfilePicture?: string | null;
   content: string;
+  parentId?: string | null;
+  repliesCount?: number;
+  upvotesCount?: number;
   createdAt: any;
 }
 
@@ -60,6 +65,8 @@ export default function PostDetailScreen() {
   const router = useRouter();
   const { user, userData } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   const [post, setPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -67,6 +74,7 @@ export default function PostDetailScreen() {
   const [newComment, setNewComment] = useState("");
   const [sending, setSending] = useState(false);
   const [hasUpvoted, setHasUpvoted] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<{ id: string; name: string } | null>(null);
 
   // Load post
   useEffect(() => {
@@ -75,7 +83,7 @@ export default function PostDetailScreen() {
       .collection("posts")
       .doc(id)
       .onSnapshot((doc) => {
-        if (doc.exists()) {
+        if (doc.data()) {
           setPost({ id: doc.id, ...doc.data() });
         }
         setLoading(false);
@@ -90,9 +98,10 @@ export default function PostDetailScreen() {
       .collection("post_replies")
       .where("postId", "==", id)
       .onSnapshot(
-        (snap) => {
+        async (snap) => {
           if (!snap) return;
           const items: Reply[] = [];
+          
           snap.forEach((doc) => {
             const data = doc.data();
             items.push({
@@ -101,16 +110,58 @@ export default function PostDetailScreen() {
               authorName: data.authorName || 'Unknown',
               authorProfilePicture: data.authorProfilePicture || null,
               content: data.content || '',
+              parentId: data.parentId || null,
+              repliesCount: data.repliesCount || 0,
+              upvotesCount: data.upvotesCount || 0,
               createdAt: data.createdAt,
             });
           });
+
           // Sort client-side by createdAt ascending
           items.sort((a, b) => {
             const aTime = a.createdAt?.toDate?.()?.getTime() || 0;
             const bTime = b.createdAt?.toDate?.()?.getTime() || 0;
             return aTime - bTime;
           });
-          setReplies(items);
+
+          // Instantly show text-only comments while we fetch avatars
+          setReplies([...items]);
+
+          // Fetch profile pictures in the background and update state
+          try {
+            const authorIds = [...new Set(items.map(item => item.authorId).filter(Boolean))];
+            if (authorIds.length > 0) {
+              const userDocs = await Promise.all(
+                authorIds.map(uid => firestore().collection("users").doc(uid).get())
+              );
+              
+              const profilePicMap: Record<string, string> = {};
+              userDocs.forEach(uDoc => {
+                if (uDoc.data()) {
+                  const data = uDoc.data();
+                  if (data?.profilePicture) {
+                    profilePicMap[uDoc.id] = data.profilePicture;
+                  }
+                }
+              });
+
+              // Apply the fetched pictures
+              let hasUpdates = false;
+              const updatedItems = items.map(item => {
+                if (profilePicMap[item.authorId] && profilePicMap[item.authorId] !== item.authorProfilePicture) {
+                  hasUpdates = true;
+                  return { ...item, authorProfilePicture: profilePicMap[item.authorId] };
+                }
+                return item;
+              });
+
+              if (hasUpdates) {
+                setReplies(updatedItems);
+              }
+            }
+          } catch (err) {
+            console.error("Failed to fetch author profiles:", err);
+          }
         },
         (err) => console.warn("Replies listener error:", err)
       );
@@ -143,35 +194,175 @@ export default function PostDetailScreen() {
     if (!newComment.trim() || !user || !userData || !id) return;
     setSending(true);
     try {
-      await firestore()
-        .collection("post_replies")
-        .add({
-          postId: id,
-          authorId: user.uid,
-          authorName: userData.name || "Unknown",
-          authorSchool: userData.school || "",
-          authorProfilePicture: userData.profilePicture || null,
-          content: newComment.trim(),
-          upvotesCount: 0,
-          createdAt: firestore.FieldValue.serverTimestamp(),
-          updatedAt: firestore.FieldValue.serverTimestamp(),
-        });
+      const replyData = {
+        postId: id,
+        authorId: user.uid,
+        authorName: userData.name || "Unknown",
+        authorSchool: userData.school || "",
+        authorProfilePicture: userData.profilePicture || null,
+        content: newComment.trim(),
+        upvotesCount: 0,
+        repliesCount: 0,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+      };
 
-      // Increment replies count
-      await firestore()
-        .collection("posts")
-        .doc(id)
-        .update({
+      if (replyingTo) {
+        (replyData as any).parentId = replyingTo.id;
+      }
+
+      await firestore().collection("post_replies").add(replyData);
+
+      // Increment replies count on post
+      await firestore().collection("posts").doc(id).update({
+        repliesCount: firestore.FieldValue.increment(1),
+      });
+
+      // Increment replies count on parent comment if replying
+      if (replyingTo) {
+        await firestore().collection("post_replies").doc(replyingTo.id).update({
           repliesCount: firestore.FieldValue.increment(1),
         });
+      }
 
       setNewComment("");
+      setReplyingTo(null);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
     } catch (err) {
       console.error("Comment error:", err);
     } finally {
       setSending(false);
     }
+  };
+
+  const handleDeleteComment = (replyId: string) => {
+    Alert.alert(
+      "Delete Comment",
+      "Are you sure you want to delete this comment?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await firestore().collection("post_replies").doc(replyId).delete();
+              
+              if (post) {
+                await firestore().collection("posts").doc(post.id).update({
+                  repliesCount: firestore.FieldValue.increment(-1),
+                });
+              }
+            } catch (err) {
+              console.error("Delete comment error:", err);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Build Replies Tree
+  const repliesMap = useMemo(() => {
+    const map: Record<string, Reply[]> = {};
+    replies.forEach((r) => {
+      const parentId = r.parentId || "root";
+      if (!map[parentId]) map[parentId] = [];
+      map[parentId].push(r);
+    });
+    return map;
+  }, [replies]);
+
+  const renderCommentNode = (reply: Reply, level = 0) => {
+    const children = repliesMap[reply.id] || [];
+    const isIndented = level > 0;
+
+    return (
+      <View key={reply.id} className={`mb-4 ${isIndented ? "ml-10 mt-1" : ""}`}>
+        <View className="flex-row">
+          <TouchableOpacity
+            onPress={() => router.push(`/profile/${reply.authorId}` as any)}
+          >
+            <View
+              className={`${
+                isIndented ? "w-7 h-7" : "w-9 h-9"
+              } rounded-full bg-surface-soft dark:bg-surface-dark-secondary items-center justify-center mr-3 overflow-hidden`}
+            >
+              {reply.authorProfilePicture ? (
+                <Image
+                  source={{ uri: reply.authorProfilePicture }}
+                  className="w-full h-full"
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text
+                  variant="caption"
+                  className="text-content-secondary font-sans-semibold"
+                  style={{ fontSize: isIndented ? 12 : 14 }}
+                >
+                  {reply.authorName?.[0]?.toUpperCase() || "?"}
+                </Text>
+              )}
+            </View>
+          </TouchableOpacity>
+          <View className="flex-1">
+            <View className="flex-row items-center mb-1">
+              <Text
+                variant="label"
+                className={`font-sans-semibold mr-2 ${
+                  isIndented ? "text-[13px]" : "text-[14px]"
+                }`}
+              >
+                {reply.authorName}
+              </Text>
+              <Text variant="caption" className="text-content-tertiary">
+                {timeAgo(reply.createdAt)}
+              </Text>
+            </View>
+            <Text
+              variant="body"
+              className={`text-content-secondary dark:text-content-dark-secondary leading-[22px] ${
+                isIndented ? "text-[14px]" : "text-[15px]"
+              }`}
+            >
+              {reply.content}
+            </Text>
+
+            {/* Comment Actions */}
+            <View className="flex-row items-center gap-4 mt-1.5">
+              <TouchableOpacity className="flex-row items-center">
+                <Text variant="caption" className="text-content-tertiary font-sans-semibold">
+                  {reply.upvotesCount || 0} Likes
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setReplyingTo({ id: reply.id, name: reply.authorName })}
+              >
+                <Text variant="caption" className="text-content-tertiary font-sans-semibold">
+                  Reply
+                </Text>
+              </TouchableOpacity>
+              {(reply.authorId === user?.uid || (userData as any)?.role === "admin") && (
+                <TouchableOpacity
+                  onPress={() => handleDeleteComment(reply.id)}
+                >
+                  <Text variant="caption" className="text-[#FF3B30] font-sans-semibold">
+                    Delete
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+
+        {/* Recursive Children */}
+        {children.length > 0 && (
+          <View className="mt-3">
+            {children.map((child) => renderCommentNode(child, level + 1))}
+          </View>
+        )}
+      </View>
+    );
   };
 
   if (loading) {
@@ -210,13 +401,13 @@ export default function PostDetailScreen() {
         keyboardVerticalOffset={0}
       >
         {/* Header */}
-        <View className="flex-row items-center px-5 py-3 border-b border-content-secondary/10">
+        <View className="flex-row items-center px-5 py-3 border-b border-surface-soft dark:border-surface-dark-secondary">
           <TouchableOpacity
             onPress={() => router.back()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            className="mr-4"
+            className="mr-4 p-1"
           >
-            <ArrowLeft size={24} color="#1D1D1F" />
+            <ArrowLeft size={22} color={isDark ? '#F5F5F7' : '#1A1A1C'} />
           </TouchableOpacity>
           <Text variant="h4">Post</Text>
         </View>
@@ -228,10 +419,10 @@ export default function PostDetailScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {/* Post Content */}
-          <View className="px-5 py-6 border-b border-content-secondary/10">
+          <View className="px-5 py-5 border-b border-surface-soft dark:border-surface-dark-secondary">
             {/* Author Row */}
             <TouchableOpacity
-              className="flex-row items-center mb-5"
+              className="flex-row items-center mb-4"
               activeOpacity={isAnonymous ? 1 : 0.7}
               disabled={isAnonymous}
               onPress={() =>
@@ -239,20 +430,21 @@ export default function PostDetailScreen() {
               }
             >
               <View
-                className={`w-12 h-12 rounded-full items-center justify-center mr-3 ${
-                  isAnonymous ? "bg-brand-pink-soft/10" : "bg-brand-teal/10"
+                className={`w-11 h-11 rounded-full items-center justify-center mr-3 overflow-hidden ${
+                  isAnonymous ? "bg-purple-100 dark:bg-purple-900/30" : "bg-surface-soft dark:bg-surface-dark-secondary"
                 }`}
               >
                 {!isAnonymous && post.authorProfilePicture ? (
                   <Image
                     source={{ uri: post.authorProfilePicture }}
-                    className="w-full h-full rounded-full"
+                    className="w-full h-full"
+                    resizeMode="cover"
                   />
                 ) : (
                   <Text
                     variant="h4"
                     className={
-                      isAnonymous ? "text-brand-pink-soft" : "text-brand-teal"
+                      isAnonymous ? "text-purple-500" : "text-content-secondary"
                     }
                   >
                     {avatarText}
@@ -260,22 +452,28 @@ export default function PostDetailScreen() {
                 )}
               </View>
               <View className="flex-1">
-                <Text variant="label" numberOfLines={1}>
+                <Text variant="label" className="font-sans-semibold" numberOfLines={1}>
                   {displayName}
                 </Text>
                 <Text
                   variant="caption"
-                  className="text-content-secondary mt-0.5"
+                  className="text-content-tertiary mt-0.5"
                 >
                   {post.school}
                   {post.city ? ` · ${post.city}` : ""} ·{" "}
                   {timeAgo(post.createdAt)}
                 </Text>
               </View>
-              <View className="bg-brand-teal/10 px-2.5 py-1 rounded">
+              <View className={`px-2.5 py-1 rounded-md ${
+                post.type === 'confession' 
+                  ? 'bg-purple-50 dark:bg-purple-900/20' 
+                  : 'bg-surface-soft dark:bg-surface-dark-secondary'
+              }`}>
                 <Text
                   variant="caption"
-                  className="text-brand-teal text-[10px] uppercase font-sans-medium tracking-wider"
+                  className={`text-[11px] font-sans-semibold capitalize ${
+                    post.type === 'confession' ? 'text-purple-500' : 'text-content-secondary'
+                  }`}
                 >
                   {post.type}
                 </Text>
@@ -284,7 +482,7 @@ export default function PostDetailScreen() {
 
             {/* Title */}
             {post.title ? (
-              <Text variant="h3" className="mb-4 leading-snug">
+              <Text variant="h3" className="mb-3">
                 {post.title}
               </Text>
             ) : null}
@@ -292,7 +490,7 @@ export default function PostDetailScreen() {
             {/* Full Content */}
             <Text
               variant="body"
-              className="text-content-secondary leading-[28px] mb-5"
+              className="text-content-secondary dark:text-content-dark-secondary leading-[26px] mb-4"
             >
               {post.content}
             </Text>
@@ -301,7 +499,7 @@ export default function PostDetailScreen() {
             {postImages.map((url: string, idx: number) => (
               <View
                 key={idx}
-                className="w-full aspect-video rounded-2xl overflow-hidden mb-4 bg-surface-base"
+                className="w-full aspect-video rounded-xl overflow-hidden mb-3 bg-surface-soft dark:bg-surface-dark-secondary"
               >
                 <Image
                   source={{ uri: url }}
@@ -312,22 +510,22 @@ export default function PostDetailScreen() {
             ))}
 
             {/* Action Bar */}
-            <View className="flex-row items-center gap-6 pt-3">
+            <View className="flex-row items-center gap-5 pt-3">
               <TouchableOpacity
                 onPress={handleUpvote}
                 className="flex-row items-center"
               >
                 <Heart
                   size={22}
-                  color={hasUpvoted ? "#F77CA2" : "#8E8E93"}
-                  fill={hasUpvoted ? "#F77CA2" : "transparent"}
+                  color={hasUpvoted ? "#FF375F" : "#8E8E93"}
+                  fill={hasUpvoted ? "#FF375F" : "transparent"}
                 />
                 <Text
                   variant="label"
                   className={`ml-1.5 ${
                     hasUpvoted
-                      ? "text-brand-pink-soft"
-                      : "text-content-secondary"
+                      ? "text-brand-pink"
+                      : "text-content-tertiary"
                   }`}
                 >
                   {post.upvotesCount || 0}
@@ -335,7 +533,7 @@ export default function PostDetailScreen() {
               </TouchableOpacity>
               <View className="flex-row items-center">
                 <MessageCircle size={22} color="#8E8E93" />
-                <Text variant="label" className="ml-1.5 text-content-secondary">
+                <Text variant="label" className="ml-1.5 text-content-tertiary">
                   {replies.length}
                 </Text>
               </View>
@@ -346,103 +544,81 @@ export default function PostDetailScreen() {
           </View>
 
           {/* Comments Section */}
-          <View className="px-5 pt-5">
-            <Text variant="h4" className="mb-5">
+          <View className="px-5 pt-4">
+            <Text variant="h4" className="mb-4">
               Comments ({replies.length})
             </Text>
 
             {replies.length === 0 ? (
               <View className="items-center py-8">
+                <MessageCircle size={32} color={isDark ? '#2C2C2E' : '#E5E5EA'} />
                 <Text
-                  variant="body"
-                  className="text-content-tertiary text-center"
+                  variant="bodySmall"
+                  className="text-content-tertiary text-center mt-3"
                 >
                   No comments yet. Be the first!
                 </Text>
               </View>
             ) : (
-              replies.map((reply) => (
-                <View
-                  key={reply.id}
-                  className="flex-row mb-5"
-                >
-                  <TouchableOpacity
-                    onPress={() =>
-                      router.push(`/profile/${reply.authorId}` as any)
-                    }
-                  >
-                    <View className="w-9 h-9 rounded-full bg-brand-teal/10 items-center justify-center mr-3">
-                      {reply.authorProfilePicture ? (
-                        <Image
-                          source={{ uri: reply.authorProfilePicture }}
-                          className="w-full h-full rounded-full"
-                        />
-                      ) : (
-                        <Text variant="caption" className="text-brand-teal">
-                          {reply.authorName?.[0]?.toUpperCase() || "?"}
-                        </Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                  <View className="flex-1">
-                    <View className="flex-row items-center mb-1">
-                      <Text variant="label" className="mr-2">
-                        {reply.authorName}
-                      </Text>
-                      <Text
-                        variant="caption"
-                        className="text-content-tertiary"
-                      >
-                        {timeAgo(reply.createdAt)}
-                      </Text>
-                    </View>
-                    <Text
-                      variant="body"
-                      className="text-content-secondary leading-[24px]"
-                    >
-                      {reply.content}
-                    </Text>
-                  </View>
-                </View>
-              ))
+              (repliesMap["root"] || []).map((reply) => renderCommentNode(reply, 0))
             )}
           </View>
         </ScrollView>
 
-        {/* Comment Input */}
-        <View className="flex-row items-center px-5 py-3 border-t border-content-secondary/10 bg-surface dark:bg-surface-dark">
-          <View className="w-8 h-8 rounded-full bg-brand-teal/10 items-center justify-center mr-3">
-            {userData?.profilePicture ? (
-              <Image
-                source={{ uri: userData.profilePicture }}
-                className="w-full h-full rounded-full"
-              />
-            ) : (
-              <Text variant="caption" className="text-brand-teal">
-                {userData?.name?.[0]?.toUpperCase() || "?"}
+        {/* Input Area Wrapper */}
+        <View className="border-t border-surface-soft dark:border-surface-dark-secondary bg-surface dark:bg-surface-dark pb-2">
+          {/* Replying To Indicator */}
+          {replyingTo && (
+            <View className="flex-row items-center justify-between px-5 py-2 bg-surface-soft dark:bg-surface-dark-secondary">
+              <Text variant="caption" className="text-content-secondary font-sans-medium">
+                Replying to <Text variant="caption" className="font-sans-bold text-brand-teal">@{replyingTo.name}</Text>
               </Text>
-            )}
-          </View>
-          <TextInput
-            value={newComment}
-            onChangeText={setNewComment}
-            placeholder="Write a comment..."
-            placeholderTextColor="#9CA3AF"
-            className="flex-1 h-10 px-4 rounded-full border border-content-secondary/20 text-content bg-transparent text-[15px]"
-            returnKeyType="send"
-            onSubmitEditing={handleSendComment}
-          />
-          <TouchableOpacity
-            onPress={handleSendComment}
-            disabled={!newComment.trim() || sending}
-            className="ml-3"
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Send
-              size={22}
-              color={newComment.trim() ? "#0071E3" : "#9CA3AF"}
+              <TouchableOpacity
+                onPress={() => setReplyingTo(null)}
+                className="p-1"
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <X size={14} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Comment Input */}
+          <View className="flex-row items-center px-5 py-3">
+            <View className="w-8 h-8 rounded-full bg-surface-soft dark:bg-surface-dark-secondary items-center justify-center mr-3 overflow-hidden">
+              {userData?.profilePicture ? (
+                <Image
+                  source={{ uri: userData.profilePicture }}
+                  className="w-full h-full"
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text variant="caption" className="text-content-secondary font-sans-semibold">
+                  {userData?.name?.[0]?.toUpperCase() || "?"}
+                </Text>
+              )}
+            </View>
+            <TextInput
+              value={newComment}
+              onChangeText={setNewComment}
+              placeholder={replyingTo ? "Write a reply..." : "Write a comment..."}
+              placeholderTextColor="#8E8E93"
+              className="flex-1 h-10 px-4 rounded-full bg-surface-soft dark:bg-surface-dark-secondary text-content dark:text-content-dark text-[15px]"
+              returnKeyType="send"
+              onSubmitEditing={handleSendComment}
             />
-          </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleSendComment}
+              disabled={!newComment.trim() || sending}
+              className="ml-3"
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Send
+                size={22}
+                color={newComment.trim() ? "#14B8A6" : "#8E8E93"}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -77,7 +77,7 @@ export default function WishlistScreen() {
               return {
                 wishlistDocId: wd.id,
                 productId: wd.productId,
-                product: productDoc.exists
+                product: productDoc.data()
                   ? { id: productDoc.id, ...productDoc.data() }
                   : null,
               } as WishlistItem;

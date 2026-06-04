@@ -8,11 +8,10 @@
  * Doc shape: { followerId, followingId, createdAt }
  */
 
-import { useState, useEffect, useMemo } from "react";
-import firestore from "@react-native-firebase/firestore";
 import { useAuth } from "@/providers/AuthProvider";
+import firestore from "@react-native-firebase/firestore";
+import { useEffect, useMemo, useState } from "react";
 
-// ─── Follow / Unfollow ───────────────────────────────────
 
 export async function followUser(
   currentUserId: string,

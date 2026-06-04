@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { View, FlatList, ActivityIndicator, RefreshControl, TouchableOpacity, Image, Alert, ScrollView, TextInput } from "react-native";
+import { View, FlatList, RefreshControl, TouchableOpacity, Image, Alert, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Text } from "@/components/ui/Text";
@@ -17,8 +17,8 @@ type FeedItem =
   | { type: 'product'; data: Product; timestamp: number };
 
 export default function FeedScreen() {
-  const { user, userData } = useAuth();
   const router = useRouter();
+  const { user, userData } = useAuth();
   
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -56,7 +56,7 @@ export default function FeedScreen() {
           if (uncachedIds.size > 0) {
             const promises = Array.from(uncachedIds).map(async (uid) => {
               const uDoc = await firestore().collection('users').doc(uid).get();
-              if (uDoc.exists()) userCache[uid] = uDoc.data();
+              if (uDoc.data()) userCache[uid] = uDoc.data();
               else userCache[uid] = {};
             });
             await Promise.all(promises);
@@ -223,6 +223,7 @@ export default function FeedScreen() {
           hasUpvoted={upvotedPostIds.has(item.data.id)}
           onPress={() => router.push(`/post/${item.data.id}` as any)}
           onUpvote={() => handleUpvote(item.data)}
+          onAuthorPress={() => router.push(`/profile/${item.data.authorId}` as any)}
         />
       );
     } else {
@@ -232,55 +233,76 @@ export default function FeedScreen() {
           isWishlisted={wishlistedIds.has(item.data.id)}
           onPress={() => router.push(`/product/${item.data.id}` as any)}
           onToggleWishlist={() => handleToggleWishlist(item.data)}
+          onSellerPress={() => router.push(`/profile/${item.data.sellerId}` as any)}
         />
       );
     }
   };
 
   const isLoading = loadingPosts || loadingProducts;
+  const isDark = colorScheme === 'dark';
+  const iconColor = isDark ? '#F5F5F7' : '#1A1A1C';
+
+  const tabs: { key: typeof contentType; label: string }[] = [
+    { key: 'all', label: 'For you' },
+    { key: 'posts', label: 'Posts' },
+    { key: 'marketplace', label: 'Market' },
+  ];
 
   return (
     <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={['top']}>
-      <View className="bg-surface px-5 pt-4">
+      <View className="bg-surface dark:bg-surface-dark px-5 pt-3 pb-0">
         {/* Top Header */}
-        <View className="flex-row items-center justify-between mb-4">
+        <View className="flex-row items-center justify-between mb-3">
           <View className="flex-row items-center">
             <Image 
               source={require('../../../assets/images/logo.png')} 
               className="h-7 w-7 mr-2"
               resizeMode="contain"
             />
-            <Text variant="h2" className="text-xl font-bold tracking-tight">
+            <Text variant="h2" className="text-[22px] tracking-tight">
               nextbench
             </Text>
           </View>
-          <View className="flex-row items-center gap-4">
-            <TouchableOpacity onPress={toggleTheme} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              {colorScheme === 'dark' ? <Sun size={20} color="#FFFFFF" /> : <Moon size={20} color="#1D1D1F" />}
+          <View className="flex-row items-center gap-3">
+            <TouchableOpacity 
+              onPress={toggleTheme} 
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              className="p-1"
+            >
+              {isDark ? <Sun size={20} color={iconColor} /> : <Moon size={20} color={iconColor} />}
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/notifications')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Bell size={20} color={colorScheme === 'dark' ? '#FFFFFF' : '#1D1D1F'} />
+            <TouchableOpacity 
+              onPress={() => router.push('/notifications')} 
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              className="p-1"
+            >
+              <Bell size={20} color={iconColor} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Sub-tabs */}
-        <View className="flex-row border-b border-content-secondary/10">
-          {(['all', 'posts', 'marketplace'] as const).map(type => (
+        {/* Segment Control Tabs */}
+        <View className="flex-row bg-surface-soft dark:bg-surface-dark-secondary rounded-xl p-1 mb-3">
+          {tabs.map(tab => (
             <TouchableOpacity
-              key={type}
-              onPress={() => setContentType(type)}
-              className={`mr-6 py-3 ${
-                contentType === type ? 'border-b-2 border-content' : 'border-b-2 border-transparent'
+              key={tab.key}
+              onPress={() => setContentType(tab.key)}
+              className={`flex-1 py-2 rounded-lg items-center ${
+                contentType === tab.key 
+                  ? 'bg-surface dark:bg-surface-elevated shadow-sm' 
+                  : ''
               }`}
             >
               <Text 
                 variant="label" 
-                className={`text-[13px] capitalize ${
-                  contentType === type ? 'font-bold text-content' : 'font-medium text-content-secondary'
+                className={`text-[13px] ${
+                  contentType === tab.key 
+                    ? 'font-sans-semibold text-content dark:text-content-dark' 
+                    : 'font-sans-medium text-content-tertiary'
                 }`}
               >
-                {type === 'all' ? 'For you' : type}
+                {tab.label}
               </Text>
             </TouchableOpacity>
           ))}
@@ -297,14 +319,14 @@ export default function FeedScreen() {
           keyExtractor={item => `${item.type}-${item.data.id}`}
           renderItem={renderItem}
           ListHeaderComponent={
-            <View className="px-5 py-4 border-b-[0.5px] border-content-secondary/10">
+            <View className="px-5 py-3">
               <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-full bg-brand-teal/10 overflow-hidden mr-3 border border-brand-teal/20">
+                <View className="w-10 h-10 rounded-full bg-surface-soft dark:bg-surface-dark-secondary overflow-hidden mr-3">
                   {userData?.profilePicture ? (
                     <Image source={{ uri: userData.profilePicture }} className="w-full h-full" />
                   ) : (
                     <View className="w-full h-full items-center justify-center">
-                      <Text variant="label" className="text-brand-teal">
+                      <Text variant="label" className="text-content-secondary font-sans-semibold">
                         {userData?.name?.[0]?.toUpperCase() || '?'}
                       </Text>
                     </View>
@@ -312,10 +334,10 @@ export default function FeedScreen() {
                 </View>
                 <TouchableOpacity 
                   onPress={() => router.push('/post/create' as any)}
-                  className="flex-1 h-11 px-5 rounded-full bg-surface-soft dark:bg-surface-dark-secondary justify-center"
+                  className="flex-1 h-10 px-4 rounded-full bg-surface-soft dark:bg-surface-dark-secondary justify-center"
                   activeOpacity={0.7}
                 >
-                  <Text variant="body" className="text-content-tertiary text-[15px]">
+                  <Text variant="bodySmall" className="text-content-tertiary">
                     What's on your mind?
                   </Text>
                 </TouchableOpacity>
@@ -329,7 +351,7 @@ export default function FeedScreen() {
           }
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center pt-20 px-6">
-              <Text variant="h3" className="text-content-secondary mb-2">Nothing here</Text>
+              <Text variant="h3" className="text-content-secondary mb-2">Nothing here yet</Text>
               <Text variant="caption" className="text-center text-content-tertiary">
                 Check back later or create a new post.
               </Text>
@@ -338,7 +360,7 @@ export default function FeedScreen() {
         />
       )}
 
-      {/* Floating Compose FAB — Substack-style quill */}
+      {/* Floating Compose FAB */}
       <TouchableOpacity
         onPress={() => router.push('/post/create' as any)}
         activeOpacity={0.85}
@@ -346,20 +368,20 @@ export default function FeedScreen() {
           position: 'absolute',
           bottom: 100,
           right: 20,
-          width: 56,
-          height: 56,
-          borderRadius: 28,
-          backgroundColor: '#0071E3',
+          width: 52,
+          height: 52,
+          borderRadius: 16,
+          backgroundColor: '#14B8A6',
           alignItems: 'center',
           justifyContent: 'center',
-          shadowColor: '#0071E3',
+          shadowColor: '#000',
           shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.35,
+          shadowOpacity: 0.15,
           shadowRadius: 12,
           elevation: 8,
         }}
       >
-        <Feather size={24} color="#FFFFFF" />
+        <Feather size={22} color="#FFFFFF" />
       </TouchableOpacity>
     </SafeAreaView>
   );

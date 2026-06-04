@@ -23,11 +23,12 @@ export interface Post {
   createdAt: any;
 }
 
-interface PostCardProps {
+export interface PostCardProps {
   post: Post;
-  hasUpvoted: boolean;
-  onPress: () => void;
+  hasUpvoted?: boolean;
+  onPress?: () => void;
   onUpvote?: () => void;
+  onAuthorPress?: () => void;
 }
 
 function timeAgo(date: any): string {
@@ -42,8 +43,7 @@ function timeAgo(date: any): string {
   return date.toDate().toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export default function PostCard({ post, hasUpvoted, onPress, onUpvote }: PostCardProps) {
-  const router = useRouter();
+export default function PostCard({ post, hasUpvoted, onPress, onUpvote, onAuthorPress }: PostCardProps) {
   const postImageUrls = post.imageUrls && post.imageUrls.length > 0
     ? post.imageUrls
     : (post.imageUrl ? [post.imageUrl] : []);
@@ -56,26 +56,20 @@ export default function PostCard({ post, hasUpvoted, onPress, onUpvote }: PostCa
   return (
     <View className="bg-surface dark:bg-surface-dark">
     <TouchableOpacity
-      activeOpacity={0.95}
+      activeOpacity={0.92}
       onPress={onPress}
-      className="py-7 px-6">
+      className="px-5 py-5">
 
-      {/* Title */}
-      {post.title ? (
-        <Text variant="h3" className="mb-4 leading-snug">
-          {post.title}
-        </Text>
-      ) : null}
-
+      {/* Author Row */}
       <TouchableOpacity
-        className="flex-row items-center mb-5"
+        className="flex-row items-center mb-3"
         activeOpacity={isAnonymous ? 1 : 0.7}
-        disabled={isAnonymous}
-        onPress={() => !isAnonymous && router.push(`/profile/${post.authorId}` as any)}
+        disabled={isAnonymous || !onAuthorPress}
+        onPress={onAuthorPress}
       >
         <View
-          className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${
-            isAnonymous ? 'bg-brand-pink-soft/10' : 'bg-brand-teal/10'
+          className={`w-10 h-10 rounded-full items-center justify-center mr-3 overflow-hidden ${
+            isAnonymous ? 'bg-purple-100 dark:bg-purple-900/30' : 'bg-surface-soft dark:bg-surface-dark-secondary'
           }`}
         >
           {!isAnonymous && post.authorProfilePicture ? (
@@ -86,7 +80,7 @@ export default function PostCard({ post, hasUpvoted, onPress, onUpvote }: PostCa
           ) : (
             <Text
               variant="label"
-              className={isAnonymous ? 'text-brand-pink-soft' : 'text-brand-teal'}
+              className={`font-sans-semibold ${isAnonymous ? 'text-purple-500' : 'text-content-secondary'}`}
             >
               {avatarText}
             </Text>
@@ -94,27 +88,33 @@ export default function PostCard({ post, hasUpvoted, onPress, onUpvote }: PostCa
         </View>
         <View className="flex-1">
           <View className="flex-row items-center">
-            <Text variant="label" className="font-sans-medium mr-2" numberOfLines={1}>
+            <Text variant="label" className="font-sans-semibold mr-1.5" numberOfLines={1}>
               {displayName}
             </Text>
-            <Text variant="caption" className="text-content-secondary">
-              • {timeAgo(post.createdAt)}
+            <Text variant="caption" className="text-content-tertiary">
+              · {timeAgo(post.createdAt)}
             </Text>
           </View>
-          <Text variant="caption" className="text-content-secondary mt-0.5" numberOfLines={1}>
-            {post.school} {post.city ? ` • ${post.city}` : ''}
+          <Text variant="caption" className="text-content-tertiary mt-0.5" numberOfLines={1}>
+            {post.school}{post.city ? ` · ${post.city}` : ''}
           </Text>
         </View>
-        <View className="items-end">
-          <View className="bg-brand-teal/10 px-2 py-1 rounded">
-            <Text variant="caption" className="text-brand-teal text-[9px] uppercase font-bold tracking-wider">
+        <View className="flex-row items-center gap-1.5">
+          <View className={`px-2 py-1 rounded-md ${
+            post.type === 'confession' 
+              ? 'bg-purple-50 dark:bg-purple-900/20' 
+              : 'bg-surface-soft dark:bg-surface-dark-secondary'
+          }`}>
+            <Text variant="caption" className={`text-[11px] font-sans-semibold capitalize ${
+              post.type === 'confession' ? 'text-purple-500' : 'text-content-secondary'
+            }`}>
               {post.type}
             </Text>
           </View>
           {post.feedScore && post.feedScore > 10 ? (
-            <View className="bg-amber-500/10 px-2 py-1 rounded mt-1 flex-row items-center">
-              <Flame size={10} color="#f59e0b" />
-              <Text variant="caption" className="text-amber-500 text-[9px] uppercase font-bold tracking-wider ml-1">
+            <View className="bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded-md flex-row items-center">
+              <Flame size={11} color="#f59e0b" />
+              <Text variant="caption" className="text-amber-500 text-[11px] font-sans-semibold ml-0.5">
                 Hot
               </Text>
             </View>
@@ -122,14 +122,21 @@ export default function PostCard({ post, hasUpvoted, onPress, onUpvote }: PostCa
         </View>
       </TouchableOpacity>
 
+      {/* Title */}
+      {post.title ? (
+        <Text variant="h4" className="mb-2">
+          {post.title}
+        </Text>
+      ) : null}
+
       {/* Content */}
-      <Text variant="body" className="leading-[28px] mb-5" numberOfLines={6}>
+      <Text variant="body" className="text-content-secondary dark:text-content-dark-secondary leading-[24px] mb-3" numberOfLines={5}>
         {post.content}
       </Text>
 
       {/* Image */}
       {hasImage && (
-        <View className="w-full h-48 rounded-2xl overflow-hidden mb-5 bg-surface-base">
+        <View className="w-full h-52 rounded-xl overflow-hidden mb-3 bg-surface-soft dark:bg-surface-dark-secondary">
           <Image
             source={{ uri: postImageUrls[0] || '' }}
             className="w-full h-full"
@@ -139,43 +146,37 @@ export default function PostCard({ post, hasUpvoted, onPress, onUpvote }: PostCa
       )}
 
       {/* Actions */}
-      <View className="flex-row items-center justify-between pt-4 mt-2">
-        <View className="flex-row items-center gap-6">
+      <View className="flex-row items-center justify-between pt-2">
+        <View className="flex-row items-center gap-5">
           <TouchableOpacity
             onPress={onUpvote}
             className="flex-row items-center"
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Heart size={18} color={hasUpvoted ? '#F77CA2' : '#B0B0B5'} fill={hasUpvoted ? '#F77CA2' : 'transparent'} />
-            <Text variant="label" className={`ml-1.5 ${hasUpvoted ? 'text-brand-pink-soft' : 'text-content-secondary'}`}>
+            <Heart size={20} color={hasUpvoted ? '#FF375F' : '#8E8E93'} fill={hasUpvoted ? '#FF375F' : 'transparent'} />
+            <Text variant="caption" className={`ml-1.5 font-sans-medium ${hasUpvoted ? 'text-brand-pink' : 'text-content-tertiary'}`}>
               {post.upvotesCount || 0}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <ThumbsDown size={18} color="#B0B0B5" />
-          </TouchableOpacity>
           <TouchableOpacity className="flex-row items-center" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} onPress={onPress}>
-            <MessageCircle size={18} color="#B0B0B5" />
-            <Text variant="label" className="ml-1.5 text-content-secondary">
+            <MessageCircle size={20} color="#8E8E93" />
+            <Text variant="caption" className="ml-1.5 text-content-tertiary font-sans-medium">
               {post.repliesCount || 0}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Share2 size={18} color="#B0B0B5" />
+            <Share2 size={20} color="#8E8E93" />
           </TouchableOpacity>
         </View>
         <View className="flex-row items-center gap-4">
           <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Bookmark size={18} color="#B0B0B5" />
-          </TouchableOpacity>
-          <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Flag size={18} color="#B0B0B5" />
+            <Bookmark size={20} color="#8E8E93" />
           </TouchableOpacity>
         </View>
       </View>
     </TouchableOpacity>
-    {/* Elegant subtle divider between posts */}
-    <View className="h-[1px] bg-content-secondary/10 mx-6 mt-2" />
+    {/* Card separator */}
+    <View className="h-[0.5px] bg-border dark:bg-border mx-5" style={{ backgroundColor: 'rgba(0,0,0,0.06)' }} />
     </View>
   );
 }

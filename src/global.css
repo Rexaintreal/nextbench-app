@@ -5,63 +5,65 @@
 @layer base {
   :root {
     --color-surface-base: #FFFFFF;
-    --color-surface-soft: #F9FAFB;
+    --color-surface-soft: #F5F5F7;
     --color-surface-card: #FFFFFF;
     --color-surface-elevated: #FFFFFF;
-    --color-luxury-ink: #1D1D1F;
-    --color-luxury-ink-muted: #6B7280;
-    --color-luxury-ink-faint: #9CA3AF;
-    --color-brand-teal: #0071E3;
-    --color-brand-pink: #FF375F;
-    --color-brand-pink-soft: #FF6482;
+    --color-surface-gap: #F0F0F2;
+    --color-luxury-ink: #1A1A1C;
+    --color-luxury-ink-muted: #636366;
+    --color-luxury-ink-faint: #8E8E93;
+    --color-brand-teal: #14b8a6;
+    --color-brand-pink: #f43f5e;
+    --color-brand-pink-soft: #fb7185;
     --color-brand-mint: #34C759;
-    --color-border: rgba(29, 29, 31, 0.08);
-    --color-border-strong: rgba(29, 29, 31, 0.15);
+    --color-border: rgba(0, 0, 0, 0.06);
+    --color-border-strong: rgba(0, 0, 0, 0.12);
     --color-glass-bg: rgba(255, 255, 255, 0.72);
     --color-glass-border: rgba(255, 255, 255, 0.28);
-    --color-skeleton-from: #E8E8EA;
-    --color-skeleton-via: #DCDCE0;
-    --color-shadow-brand: rgba(0, 113, 227, 0.18);
-    --color-glow-pink: rgba(255, 55, 95, 0.0);
-    --color-glow-teal: rgba(0, 113, 227, 0.0);
-    --color-overlay: rgba(29, 29, 31, 0.18);
-    --color-overlay-heavy: rgba(29, 29, 31, 0.58);
-    --nav-bg: rgba(245, 245, 247, 0.88);
+    --color-skeleton-from: #E8E8ED;
+    --color-skeleton-via: #DCDCE2;
+    --color-shadow-brand: rgba(20, 184, 166, 0.18);
+    --color-glow-pink: rgba(244, 63, 94, 0.0);
+    --color-glow-teal: rgba(20, 184, 166, 0.0);
+    --color-overlay: rgba(0, 0, 0, 0.18);
+    --color-overlay-heavy: rgba(0, 0, 0, 0.58);
+    --nav-bg: rgba(245, 245, 247, 0.92);
     --color-confession-bg: rgba(147, 51, 234, 0.04);
     --color-confession-bg-hover: rgba(147, 51, 234, 0.07);
 
-    --color-primary: #0071E3;
-    --color-error: #ef4444;
+    --color-primary: #14b8a6;
+    --color-error: #FF3B30;
   }
   
   .dark:root {
     --color-surface-base: #000000;
-    --color-surface-soft: #1A1A1E;
+    --color-surface-soft: #1C1C1E;
     --color-surface-card: #1C1C1E;
     --color-surface-elevated: #2C2C2E;
-    --color-luxury-ink: #FFFFFF;
-    --color-luxury-ink-muted: #9CA3AF;
-    --color-luxury-ink-faint: #4B5563;
-    --color-brand-teal: #0A84FF;
-    --color-brand-pink: #FF375F;
-    --color-brand-pink-soft: #FF6482;
+    --color-surface-gap: #0A0A0A;
+    --color-luxury-ink: #F5F5F7;
+    --color-luxury-ink-muted: #98989D;
+    --color-luxury-ink-faint: #636366;
+    --color-brand-teal: #2dd4bf;
+    --color-brand-pink: #fb7185;
+    --color-brand-pink-soft: #fda4af;
     --color-brand-mint: #30D158;
-    --color-border: rgba(255, 255, 255, 0.06);
-    --color-border-strong: rgba(255, 255, 255, 0.12);
-    --color-glass-bg: rgba(19, 23, 34, 0.85);
-    --color-glass-border: rgba(255, 255, 255, 0.06);
-    --color-skeleton-from: #171C28;
-    --color-skeleton-via: #1C2333;
+    --color-border: rgba(255, 255, 255, 0.08);
+    --color-border-strong: rgba(255, 255, 255, 0.14);
+    --color-glass-bg: rgba(28, 28, 30, 0.88);
+    --color-glass-border: rgba(255, 255, 255, 0.08);
+    --color-skeleton-from: #1C1C1E;
+    --color-skeleton-via: #2C2C2E;
     --color-shadow-brand: transparent;
     --color-glow-pink: transparent;
     --color-glow-teal: transparent;
     --color-overlay: rgba(0, 0, 0, 0.45);
     --color-overlay-heavy: rgba(0, 0, 0, 0.80);
-    --nav-bg: rgba(13, 15, 20, 0.90);
+    --nav-bg: rgba(0, 0, 0, 0.92);
     --color-confession-bg: rgba(147, 51, 234, 0.03);
     --color-confession-bg-hover: rgba(147, 51, 234, 0.05);
 
-    --color-primary: #0A84FF;
-    --color-error: #ef4444;
+    --color-primary: #2dd4bf;
+    --color-error: #FF453A;
   }
 }

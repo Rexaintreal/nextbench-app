@@ -30,6 +30,7 @@ module.exports = {
           "border-strong": "var(--color-border-strong)",
           secondary: "var(--color-surface-soft)",
           tertiary: "var(--color-surface-elevated)",
+          gap: "var(--color-surface-gap)",
         },
         "surface-dark": {
           DEFAULT: "var(--color-surface-base)",

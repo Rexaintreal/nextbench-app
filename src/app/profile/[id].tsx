@@ -69,7 +69,7 @@ export default function OtherProfileScreen() {
       .doc(profileId)
       .onSnapshot(
         (doc) => {
-          if (doc.exists) {
+          if (doc.data()) {
             setProfileData({ id: doc.id, ...doc.data() });
           }
           setLoading(false);
@@ -93,6 +93,9 @@ export default function OtherProfileScreen() {
         );
         setListings(items);
         setLoadingListings(false);
+      }, (error) => {
+        console.error("Failed to fetch listings:", error);
+        setLoadingListings(false);
       });
     return () => unsub();
   }, [profileId]);
@@ -109,6 +112,9 @@ export default function OtherProfileScreen() {
           items.push({ id: doc.id, ...doc.data() } as Post)
         );
         setPosts(items);
+        setLoadingPosts(false);
+      }, (error) => {
+        console.error("Failed to fetch posts:", error);
         setLoadingPosts(false);
       });
     return () => unsub();
