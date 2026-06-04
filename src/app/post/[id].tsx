@@ -25,14 +25,16 @@ import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import firestore from "@react-native-firebase/firestore";
 import {
-  ArrowLeft,
   Heart,
   MessageCircle,
   Share2,
+  MoreHorizontal,
+  ArrowLeft,
   Send,
   X,
+  Bookmark,
 } from "lucide-react-native";
-import { toggleUpvote } from "@/lib/social";
+import { toggleUpvote, toggleSavePost } from "@/lib/social";
 
 interface Reply {
   id: string;
@@ -73,6 +75,7 @@ export default function PostDetailScreen() {
   const [newComment, setNewComment] = useState("");
   const [sending, setSending] = useState(false);
   const [hasUpvoted, setHasUpvoted] = useState(false);
+  const [hasSaved, setHasSaved] = useState(false);
   const [replyingTo, setReplyingTo] = useState<{ id: string; name: string } | null>(null);
 
   // Load post
@@ -180,12 +183,34 @@ export default function PostDetailScreen() {
     return () => unsub();
   }, [id, user]);
 
+  // Check saved status
+  useEffect(() => {
+    if (!id || !user) return;
+    const unsub = firestore()
+      .collection("saved_posts")
+      .where("postId", "==", id)
+      .where("userId", "==", user.uid)
+      .onSnapshot((snap) => {
+        setHasSaved(snap && snap.size > 0);
+      });
+    return () => unsub();
+  }, [id, user]);
+
   const handleUpvote = async () => {
     if (!user || !id) return;
     try {
       await toggleUpvote(id, user.uid);
     } catch (err) {
       console.error("Upvote error:", err);
+    }
+  };
+
+  const handleToggleSave = async () => {
+    if (!user || !id) return;
+    try {
+      await toggleSavePost(id, user.uid);
+    } catch (err) {
+      console.error("Save post error:", err);
     }
   };
 
@@ -509,36 +534,43 @@ export default function PostDetailScreen() {
             ))}
 
             {/* Action Bar */}
-            <View className="flex-row items-center gap-5 pt-3">
-              <TouchableOpacity
-                onPress={handleUpvote}
-                className="flex-row items-center"
-              >
-                <Heart
-                  size={22}
-                  color={hasUpvoted ? "#FF375F" : "#8E8E93"}
-                  fill={hasUpvoted ? "#FF375F" : "transparent"}
-                />
-                <Text
-                  variant="label"
-                  className={`ml-1.5 ${
-                    hasUpvoted
-                      ? "text-brand-pink"
-                      : "text-content-tertiary"
-                  }`}
+            <View className="flex-row items-center justify-between pt-3">
+              <View className="flex-row items-center gap-5">
+                <TouchableOpacity
+                  onPress={handleUpvote}
+                  className="flex-row items-center"
                 >
-                  {post.upvotesCount || 0}
-                </Text>
-              </TouchableOpacity>
-              <View className="flex-row items-center">
-                <MessageCircle size={22} color="#8E8E93" />
-                <Text variant="label" className="ml-1.5 text-content-tertiary">
-                  {replies.length}
-                </Text>
+                  <Heart
+                    size={22}
+                    color={hasUpvoted ? "#FF375F" : "#8E8E93"}
+                    fill={hasUpvoted ? "#FF375F" : "transparent"}
+                  />
+                  <Text
+                    variant="label"
+                    className={`ml-1.5 ${
+                      hasUpvoted
+                        ? "text-brand-pink"
+                        : "text-content-tertiary"
+                    }`}
+                  >
+                    {post.upvotesCount || 0}
+                  </Text>
+                </TouchableOpacity>
+                <View className="flex-row items-center">
+                  <MessageCircle size={22} color="#8E8E93" />
+                  <Text variant="label" className="ml-1.5 text-content-tertiary">
+                    {replies.length}
+                  </Text>
+                </View>
+                <TouchableOpacity>
+                  <Share2 size={22} color="#8E8E93" />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity>
-                <Share2 size={22} color="#8E8E93" />
-              </TouchableOpacity>
+              <View className="flex-row items-center">
+                <TouchableOpacity onPress={handleToggleSave}>
+                  <Bookmark size={22} color={hasSaved ? "#0071E3" : "#8E8E93"} fill={hasSaved ? "#0071E3" : "transparent"} />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 

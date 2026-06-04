@@ -84,6 +84,39 @@ export async function toggleWishlist(
   }
 }
 
+// ─── Save/Bookmark Post Toggle ─────────────────────────────
+
+/**
+ * Toggle saving (bookmarking) a post.
+ * Returns true if the post was saved, false if removed.
+ */
+export async function toggleSavePost(
+  postId: string,
+  userId: string
+): Promise<boolean> {
+  const q = await firestore()
+    .collection("saved_posts")
+    .where("userId", "==", userId)
+    .where("postId", "==", postId)
+    .get();
+
+  if (!q.empty) {
+    // Already saved → remove
+    const batch = firestore().batch();
+    q.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    return false;
+  } else {
+    // Not saved → add
+    await firestore().collection("saved_posts").add({
+      userId,
+      postId,
+      createdAt: firestore.FieldValue.serverTimestamp(),
+    });
+    return true;
+  }
+}
+
 // ─── DM Room ─────────────────────────────────────────────
 
 /**

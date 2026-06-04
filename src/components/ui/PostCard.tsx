@@ -26,8 +26,10 @@ export interface Post {
 export interface PostCardProps {
   post: Post;
   hasUpvoted?: boolean;
+  isSaved?: boolean;
   onPress?: () => void;
   onUpvote?: () => void;
+  onToggleSave?: () => void;
   onAuthorPress?: () => void;
 }
 
@@ -43,7 +45,7 @@ function timeAgo(date: any): string {
   return date.toDate().toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export default function PostCard({ post, hasUpvoted, onPress, onUpvote, onAuthorPress }: PostCardProps) {
+export default function PostCard({ post, hasUpvoted, isSaved, onPress, onUpvote, onToggleSave, onAuthorPress }: PostCardProps) {
   const postImageUrls = post.imageUrls && post.imageUrls.length > 0
     ? post.imageUrls
     : (post.imageUrl ? [post.imageUrl] : []);
@@ -176,8 +178,11 @@ export default function PostCard({ post, hasUpvoted, onPress, onUpvote, onAuthor
           </TouchableOpacity>
         </View>
         <View className="flex-row items-center gap-4">
-          <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Bookmark size={20} color="#8E8E93" />
+          <TouchableOpacity 
+            onPress={onToggleSave}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Bookmark size={20} color={isSaved ? '#0071E3' : '#8E8E93'} fill={isSaved ? '#0071E3' : 'transparent'} />
           </TouchableOpacity>
         </View>
       </View>

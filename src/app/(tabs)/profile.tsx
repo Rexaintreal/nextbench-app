@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
-import { Settings, ShieldCheck, MapPin, Grid, MessageSquare, Bell, Heart, X } from "lucide-react-native";
+import { Settings, ShieldCheck, MapPin, Grid, MessageSquare, Bell, Heart, X, Bookmark } from "lucide-react-native";
 import firestore from "@react-native-firebase/firestore";
 import ProductCard, { Product } from "@/components/ui/ProductCard";
 import PostCard, { Post } from "@/components/ui/PostCard";
@@ -12,7 +12,7 @@ import { useFollowCounts } from "@/lib/follows";
 
 export default function ProfileScreen() {
   const { user, userData } = useAuth();
-  const [viewMode, setViewMode] = useState<'listings' | 'posts'>('listings');
+  const [viewMode, setViewMode] = useState<'listings' | 'posts' | 'playlist'>('listings');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const iconColor = isDark ? '#F5F5F7' : '#1A1A1C';
@@ -21,6 +21,8 @@ export default function ProfileScreen() {
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [myListings, setMyListings] = useState<Product[]>([]);
   const [myPosts, setMyPosts] = useState<Post[]>([]);
+  const [savedPosts, setSavedPosts] = useState<Post[]>([]);
+  const [loadingPlaylist, setLoadingPlaylist] = useState(true);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const { followersCount, followingCount } = useFollowCounts(user?.uid);
 
@@ -82,9 +84,55 @@ export default function ProfileScreen() {
         setLoadingPosts(false);
       });
       
+    // Fetch playlist (saved posts)
+    const unsubPlaylist = firestore()
+      .collection('saved_posts')
+      .where('userId', '==', user.uid)
+      .orderBy('createdAt', 'desc')
+      .onSnapshot(async snap => {
+        if (!snap) return;
+        if (snap.empty) {
+          setSavedPosts([]);
+          setLoadingPlaylist(false);
+          return;
+        }
+        
+        try {
+          const postIds = snap.docs.map(doc => doc.data().postId);
+          // Fetch the actual posts. Firestore 'in' query supports up to 30.
+          // For a robust implementation we slice into chunks of 30, but simple approach:
+          const chunks = [];
+          for (let i = 0; i < postIds.length; i += 30) {
+            chunks.push(postIds.slice(i, i + 30));
+          }
+          
+          let allPosts: Post[] = [];
+          for (const chunk of chunks) {
+            const postsSnap = await firestore()
+              .collection('posts')
+              .where(firestore.FieldPath.documentId(), 'in', chunk)
+              .get();
+              
+            postsSnap.forEach(doc => {
+              allPosts.push({ id: doc.id, ...doc.data() } as Post);
+            });
+          }
+          
+          // Re-sort them based on saved_posts order
+          allPosts.sort((a, b) => postIds.indexOf(a.id) - postIds.indexOf(b.id));
+          
+          setSavedPosts(allPosts);
+        } catch (e) {
+          console.error("Failed to fetch saved posts", e);
+        } finally {
+          setLoadingPlaylist(false);
+        }
+      });
+
     return () => {
       unsubListings();
       unsubPosts();
+      unsubPlaylist();
     };
   }, [user]);
 
@@ -118,6 +166,66 @@ export default function ProfileScreen() {
     { label: 'Listings', value: myListings.length },
     { label: 'Posts', value: myPosts.length },
   ];
+
+  const renderContent = () => {
+    if (viewMode === 'listings') {
+      if (loadingListings) return <ActivityIndicator color="#0071E3" className="mt-8" />;
+      if (myListings.length === 0) return (
+        <View className="items-center justify-center pt-16">
+          <Grid size={32} color={isDark ? '#2C2C2E' : '#E5E5EA'} />
+          <Text variant="bodySmall" className="text-content-tertiary mt-3">No listings yet</Text>
+        </View>
+      );
+      return myListings.map(item => (
+        <ProductCard 
+          key={item.id}
+          product={item}
+          isWishlisted={false}
+          onPress={() => router.push(`/product/${item.id}` as any)}
+          onToggleWishlist={() => {}}
+        />
+      ));
+    }
+    
+    if (viewMode === 'posts') {
+      if (loadingPosts) return <ActivityIndicator color="#FF375F" className="mt-8" />;
+      if (myPosts.length === 0) return (
+        <View className="items-center justify-center pt-16">
+          <MessageSquare size={32} color={isDark ? '#2C2C2E' : '#E5E5EA'} />
+          <Text variant="bodySmall" className="text-content-tertiary mt-3">No posts yet</Text>
+        </View>
+      );
+      return myPosts.map(post => (
+        <PostCard 
+          key={post.id}
+          post={post}
+          hasUpvoted={false}
+          onPress={() => router.push(`/post/${post.id}` as any)}
+        />
+      ));
+    }
+    
+    if (viewMode === 'playlist') {
+      if (loadingPlaylist) return <ActivityIndicator color="#9333EA" className="mt-8" />;
+      if (savedPosts.length === 0) return (
+        <View className="items-center justify-center pt-16">
+          <Bookmark size={32} color={isDark ? '#2C2C2E' : '#E5E5EA'} />
+          <Text variant="bodySmall" className="text-content-tertiary mt-3">No saved posts in your playlist yet</Text>
+        </View>
+      );
+      return savedPosts.map(post => (
+        <PostCard 
+          key={post.id}
+          post={post}
+          hasUpvoted={false}
+          isSaved={true}
+          onPress={() => router.push(`/post/${post.id}` as any)}
+        />
+      ));
+    }
+    
+    return null;
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={['top']}>
@@ -224,48 +332,22 @@ export default function ProfileScreen() {
               Posts
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => setViewMode('playlist')}
+            className={`flex-1 flex-row items-center justify-center py-2.5 rounded-lg gap-2 ${
+              viewMode === 'playlist' ? 'bg-surface dark:bg-surface-elevated' : ''
+            }`}
+          >
+            <Bookmark size={16} color={viewMode === 'playlist' ? '#9333EA' : '#8E8E93'} />
+            <Text variant="label" className={`text-[13px] ${viewMode === 'playlist' ? 'font-sans-semibold text-purple-600 dark:text-purple-400' : 'text-content-tertiary'}`}>
+              Playlist
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Content Area */}
         <View className="pt-3">
-          {viewMode === 'listings' ? (
-            loadingListings ? (
-              <ActivityIndicator color="#0071E3" className="mt-8" />
-            ) : myListings.length === 0 ? (
-              <View className="items-center justify-center pt-16">
-                <Grid size={32} color={isDark ? '#2C2C2E' : '#E5E5EA'} />
-                <Text variant="bodySmall" className="text-content-tertiary mt-3">No listings yet</Text>
-              </View>
-            ) : (
-              myListings.map(item => (
-                <ProductCard 
-                  key={item.id}
-                  product={item}
-                  isWishlisted={false}
-                  onPress={() => router.push(`/product/${item.id}` as any)}
-                  onToggleWishlist={() => {}}
-                />
-              ))
-            )
-          ) : (
-            loadingPosts ? (
-              <ActivityIndicator color="#FF375F" className="mt-8" />
-            ) : myPosts.length === 0 ? (
-              <View className="items-center justify-center pt-16">
-                <MessageSquare size={32} color={isDark ? '#2C2C2E' : '#E5E5EA'} />
-                <Text variant="bodySmall" className="text-content-tertiary mt-3">No posts yet</Text>
-              </View>
-            ) : (
-              myPosts.map(post => (
-                <PostCard 
-                  key={post.id}
-                  post={post}
-                  hasUpvoted={false}
-                  onPress={() => router.push(`/post/${post.id}` as any)}
-                />
-              ))
-            )
-          )}
+          {renderContent()}
         </View>
 
       </ScrollView>

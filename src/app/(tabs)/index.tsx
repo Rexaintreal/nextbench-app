@@ -7,7 +7,7 @@ import PostCard, { Post } from "@/components/ui/PostCard";
 import ProductCard, { Product } from "@/components/ui/ProductCard";
 import { useAuth } from "@/providers/AuthProvider";
 import firestore from "@react-native-firebase/firestore";
-import { toggleUpvote, toggleWishlist } from "@/lib/social";
+import { toggleUpvote, toggleWishlist, toggleSavePost } from "@/lib/social";
 import { FeedSkeleton } from "@/components/ui/SkeletonCard";
 import { Bell, Moon, Sun, Feather } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
@@ -30,6 +30,7 @@ export default function FeedScreen() {
   
   const [upvotedPostIds, setUpvotedPostIds] = useState<Set<string>>(new Set());
   const [wishlistedIds, setWishlistedIds] = useState<Set<string>>(new Set());
+  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
 
   const [contentType, setContentType] = useState<'all' | 'posts' | 'marketplace'>('all');
   const { colorScheme, setColorScheme } = useColorScheme();
@@ -142,6 +143,21 @@ export default function FeedScreen() {
         const ids = new Set<string>();
         snap.forEach(d => ids.add(d.data().productId));
         setWishlistedIds(ids);
+      });
+    return () => unsub();
+  }, [user]);
+
+  // Listen to user's saved posts
+  useEffect(() => {
+    if (!user) return;
+    const unsub = firestore()
+      .collection('saved_posts')
+      .where('userId', '==', user.uid)
+      .onSnapshot(snap => {
+        if (!snap) return;
+        const ids = new Set<string>();
+        snap.forEach(d => ids.add(d.data().postId));
+        setSavedPostIds(ids);
       });
     return () => unsub();
   }, [user]);
@@ -307,14 +323,28 @@ export default function FeedScreen() {
     }
   };
 
+  const handleToggleSavePost = async (post: Post) => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'You need to sign in to save posts.');
+      return;
+    }
+    try {
+      await toggleSavePost(post.id, user.uid);
+    } catch (err) {
+      console.error('Save post error:', err);
+    }
+  };
+
   const renderItem = ({ item }: { item: FeedItem }) => {
     if (item.type === 'post') {
       return (
         <PostCard 
           post={item.data} 
           hasUpvoted={upvotedPostIds.has(item.data.id)}
+          isSaved={savedPostIds.has(item.data.id)}
           onPress={() => router.push(`/post/${item.data.id}` as any)}
           onUpvote={() => handleUpvote(item.data)}
+          onToggleSave={() => handleToggleSavePost(item.data)}
           onAuthorPress={() => router.push(`/profile/${item.data.authorId}` as any)}
         />
       );
