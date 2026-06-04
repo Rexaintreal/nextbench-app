@@ -228,23 +228,47 @@ export default function SearchScreen() {
           return;
         }
 
-        const [usersSnap, postsSnap, productsSnap, clubsSnap] =
+        const lowerQ = searchQuery.toLowerCase();
+        const capitalizedQ = searchQuery.charAt(0).toUpperCase() + searchQuery.slice(1);
+
+        const [usersByUsername, usersByNameLower, usersByNameCap, postsSnap, productsSnap, clubsSnap] =
           await Promise.all([
-            firestore().collection("users").limit(20).get(),
-            firestore().collection("posts").limit(20).get(),
-            firestore().collection("products").limit(20).get(),
+            firestore().collection("users")
+              .where("username", ">=", lowerQ)
+              .where("username", "<=", lowerQ + "\uf8ff")
+              .limit(15).get(),
+            firestore().collection("users")
+              .where("name", ">=", lowerQ)
+              .where("name", "<=", lowerQ + "\uf8ff")
+              .limit(15).get(),
+            firestore().collection("users")
+              .where("name", ">=", capitalizedQ)
+              .where("name", "<=", capitalizedQ + "\uf8ff")
+              .limit(15).get(),
+            firestore().collection("posts").limit(30).get(),
+            firestore().collection("products").limit(30).get(),
             firestore()
               .collection("clubs")
               .where("type", "==", "public")
-              .limit(20)
+              .limit(30)
               .get(),
           ]);
 
-        const lowerQ = searchQuery.toLowerCase();
+        const userMap = new Map<string, any>();
+        const addUsersToMap = (snap: any) => {
+          snap.docs.forEach((d: any) => {
+            userMap.set(d.id, { id: d.id, ...d.data() });
+          });
+        };
+        addUsersToMap(usersByUsername);
+        addUsersToMap(usersByNameLower);
+        addUsersToMap(usersByNameCap);
+        
+        // Also add users from initial suggestions cache to match local filter
+        suggestedUsersRef.current.forEach((u: any) => userMap.set(u.id, u));
 
         setUsers(
-          usersSnap.docs
-            .map((d) => ({ id: d.id, ...d.data() } as any))
+          Array.from(userMap.values())
             .filter(
               (u: any) =>
                 u.name?.toLowerCase().includes(lowerQ) ||
@@ -252,6 +276,7 @@ export default function SearchScreen() {
                 u.username?.toLowerCase().includes(lowerQ)
             )
         );
+
         setPosts(
           postsSnap.docs
             .map((d) => ({ id: d.id, ...d.data() } as any))
