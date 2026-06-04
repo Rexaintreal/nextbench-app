@@ -110,7 +110,7 @@ export default function ProfileScreen() {
           for (const chunk of chunks) {
             const postsSnap = await firestore()
               .collection('posts')
-              .where(firestore.FieldPath.documentId(), 'in', chunk)
+              .where(firestore.FieldPath.documentId ? firestore.FieldPath.documentId() : '__name__', 'in', chunk)
               .get();
               
             postsSnap.forEach(doc => {
