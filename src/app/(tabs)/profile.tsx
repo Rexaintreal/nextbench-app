@@ -1,23 +1,28 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { View, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList } from "react-native";
+import { View, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
-import { Settings, ShieldCheck, MapPin, Grid, MessageSquare } from "lucide-react-native";
+import { Settings, ShieldCheck, MapPin, Grid, MessageSquare, Bell, Heart } from "lucide-react-native";
 import firestore from "@react-native-firebase/firestore";
 import ProductCard, { Product } from "@/components/ui/ProductCard";
 import PostCard, { Post } from "@/components/ui/PostCard";
+import { useFollowCounts } from "@/lib/follows";
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, userData } = useAuth();
   const [viewMode, setViewMode] = useState<'listings' | 'posts'>('listings');
+  const colorScheme = useColorScheme();
+  const iconColor = colorScheme === 'dark' ? '#FFFFFF' : '#1D1D1F';
   
   const [loadingListings, setLoadingListings] = useState(true);
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [myListings, setMyListings] = useState<Product[]>([]);
   const [myPosts, setMyPosts] = useState<Post[]>([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const { followersCount, followingCount } = useFollowCounts(user?.uid);
 
   useEffect(() => {
     if (!user) return;
@@ -52,6 +57,20 @@ export default function ProfileScreen() {
     };
   }, [user]);
 
+  // Listen to unread notification count
+  useEffect(() => {
+    if (!user) return;
+    const unsub = firestore()
+      .collection('notifications')
+      .where('userId', '==', user.uid)
+      .where('read', '==', false)
+      .onSnapshot(
+        (snap) => setUnreadNotifCount(snap.size),
+        () => setUnreadNotifCount(0)
+      );
+    return () => unsub();
+  }, [user]);
+
   if (!user || !userData) {
     return (
       <SafeAreaView className="flex-1 bg-surface justify-center items-center">
@@ -69,9 +88,30 @@ export default function ProfileScreen() {
         <Text variant="h2" className="text-2xl font-serif-medium">
           Profile
         </Text>
-        <TouchableOpacity className="p-2 rounded-full border border-content-secondary/20">
-          <Settings size={20} color="#1D1D1F" />
-        </TouchableOpacity>
+        <View className="flex-row items-center gap-2">
+          <TouchableOpacity
+            onPress={() => router.push('/wishlist' as any)}
+            className="p-2 rounded-full border border-content-secondary/20"
+          >
+            <Heart size={20} color="#F77CA2" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push('/notifications' as any)}
+            className="p-2 rounded-full border border-content-secondary/20 relative"
+          >
+            <Bell size={20} color={iconColor} />
+            {unreadNotifCount > 0 && (
+              <View className="absolute -top-1 -right-1 bg-brand-pink w-4 h-4 rounded-full items-center justify-center">
+                <Text variant="caption" className="text-white text-[8px] font-bold">
+                  {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity className="p-2 rounded-full border border-content-secondary/20" onPress={() => router.push('/settings' as any)}>
+            <Settings size={20} color={iconColor} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 100 }}>
@@ -101,6 +141,14 @@ export default function ProfileScreen() {
           </View>
           
           <View className="flex-row gap-6 mt-2">
+            <View className="items-center">
+              <Text variant="h3">{followersCount}</Text>
+              <Text variant="caption" className="text-content-secondary">Followers</Text>
+            </View>
+            <View className="items-center">
+              <Text variant="h3">{followingCount}</Text>
+              <Text variant="caption" className="text-content-secondary">Following</Text>
+            </View>
             <View className="items-center">
               <Text variant="h3">{myListings.length}</Text>
               <Text variant="caption" className="text-content-secondary">Listings</Text>
@@ -171,7 +219,7 @@ export default function ProfileScreen() {
                   key={post.id}
                   post={post}
                   hasUpvoted={false}
-                  onPress={() => {}}
+                  onPress={() => router.push(`/post/${post.id}` as any)}
                 />
               ))
             )

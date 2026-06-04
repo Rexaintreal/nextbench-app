@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, TouchableOpacity, Image } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { Heart, MapPin, Tag } from 'lucide-react-native';
 
@@ -28,26 +29,32 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ product, isWishlisted, onPress, onToggleWishlist }: ProductCardProps) {
+  const router = useRouter();
   const isSold = product.status === 'sold';
   
   return (
+    <View className="bg-surface dark:bg-surface-dark">
     <TouchableOpacity
-      activeOpacity={0.9}
+      activeOpacity={0.95}
       onPress={onPress}
       disabled={isSold}
-      className={`mx-4 my-2 rounded-3xl overflow-hidden border border-brand-teal/5 bg-surface-card shadow-sm ${
+      className={`py-7 px-6 ${
         isSold ? 'opacity-70' : ''
       }`}
     >
       {/* Header */}
-      <View className="flex-row items-center p-4">
+      <TouchableOpacity
+        className="flex-row items-center mb-5"
+        activeOpacity={0.7}
+        onPress={() => router.push(`/profile/${product.sellerId}` as any)}
+      >
         <View className="w-9 h-9 rounded-full bg-surface-base items-center justify-center mr-3">
           <Text variant="label" className="text-brand-teal font-bold">
             {product.sellerName?.[0]?.toUpperCase() || '?'}
           </Text>
         </View>
         <View className="flex-1">
-          <Text variant="label" className="font-bold mb-0.5" numberOfLines={1}>
+          <Text variant="label" className="font-sans-medium mb-0.5" numberOfLines={1}>
             {product.sellerName}
           </Text>
           <Text variant="caption" className="text-content-secondary" numberOfLines={1}>
@@ -62,14 +69,14 @@ export default function ProductCard({ product, isWishlisted, onPress, onToggleWi
             </Text>
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
 
-      <Text variant="body" className="px-4 mb-3 font-semibold" numberOfLines={1}>
+      <Text variant="body" className="mb-5 font-sans-medium" numberOfLines={1}>
         {product.title}
       </Text>
 
       {/* Image Container */}
-      <View className="relative w-full aspect-[4/3] bg-surface-base">
+      <View className="relative w-full aspect-[4/3] bg-surface-base rounded-2xl overflow-hidden mb-4">
         <Image
           source={{ uri: product.image || '' }}
           className="w-full h-full"
@@ -110,7 +117,7 @@ export default function ProductCard({ product, isWishlisted, onPress, onToggleWi
       </View>
 
       {/* Footer */}
-      <View className="flex-row items-center justify-between p-4 border-t border-brand-teal/5">
+      <View className="flex-row items-center justify-between">
         <View className="flex-row items-center">
           <MapPin size={14} color="#8E8E93" />
           <Text variant="caption" className="ml-1 text-content-secondary">
@@ -118,11 +125,14 @@ export default function ProductCard({ product, isWishlisted, onPress, onToggleWi
           </Text>
         </View>
         <View className={`px-5 py-2 rounded-xl ${isSold ? 'bg-content/10' : 'bg-brand-teal'}`}>
-          <Text variant="caption" className={`font-bold ${isSold ? 'text-content-tertiary' : 'text-white'}`}>
+          <Text variant="caption" className={`font-bold uppercase tracking-widest text-[10px] ${isSold ? 'text-content-tertiary' : 'text-white'}`}>
             {isSold ? 'Sold' : 'View'}
           </Text>
         </View>
       </View>
     </TouchableOpacity>
+    {/* Elegant subtle divider between products */}
+    <View className="h-[1px] bg-content-secondary/10 mx-6 mt-2" />
+    </View>
   );
 }

@@ -6,10 +6,9 @@
  * a loading state while the redirect happens.
  */
 
-import React from "react";
-import { View, ActivityIndicator } from "react-native";
-import { Redirect } from "expo-router";
 import { useAuth } from "@/providers/AuthProvider";
+import { Redirect } from "expo-router";
+import { ActivityIndicator, View } from "react-native";
 
 export default function Index() {
   const { isLoading, isAuthenticated } = useAuth();

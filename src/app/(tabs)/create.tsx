@@ -1,18 +1,18 @@
-import React, { useState } from "react";
-import { View, ScrollView, TouchableOpacity, TextInput, Image, ActivityIndicator } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
-import * as ImagePicker from "expo-image-picker";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
-import { Upload, X } from "lucide-react-native";
 import firestore from "@react-native-firebase/firestore";
 import storage from "@react-native-firebase/storage";
+import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
+import { Upload, X } from "lucide-react-native";
+import { useState } from "react";
+import { ActivityIndicator, Image, ScrollView, TextInput, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function CreateScreen() {
   const router = useRouter();
   const { user, userData } = useAuth();
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
@@ -20,7 +20,7 @@ export default function CreateScreen() {
   const [category, setCategory] = useState("Books");
   const [condition, setCondition] = useState("Like New");
   const [images, setImages] = useState<string[]>([]);
-  
+  //easter egg - so u actually see code rather than just vibecoding huhu
   const pickImages = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -28,7 +28,7 @@ export default function CreateScreen() {
       selectionLimit: 5 - images.length,
       quality: 0.8,
     });
-    
+
     if (!result.canceled) {
       setImages(prev => [...prev, ...result.assets.map(a => a.uri)]);
     }
@@ -45,7 +45,7 @@ export default function CreateScreen() {
     const timestamp = Date.now();
     const newFilename = `${name}-${timestamp}.${extension}`;
     const storagePath = `products/${uid}/${newFilename}`;
-    
+
     const reference = storage().ref(storagePath);
     await reference.putFile(uri);
     return await reference.getDownloadURL();
@@ -56,19 +56,19 @@ export default function CreateScreen() {
       alert("You must be logged in to create a listing");
       return;
     }
-    
+
     if (!title.trim() || !price || images.length === 0) {
       alert("Please fill in title, price, and add at least one image");
       return;
     }
-    
+
     setIsSubmitting(true);
     try {
       // Upload images
       const imageUrls = await Promise.all(
         images.map(uri => uploadImage(uri, user.uid))
       );
-      
+
       const payload = {
         title: title.trim(),
         price: Number(price),
@@ -87,9 +87,9 @@ export default function CreateScreen() {
         createdAt: firestore.FieldValue.serverTimestamp(),
         updatedAt: firestore.FieldValue.serverTimestamp(),
       };
-      
+
       await firestore().collection('products').add(payload);
-      
+
       alert("Listing submitted successfully!");
       setTitle("");
       setPrice("");
@@ -111,9 +111,9 @@ export default function CreateScreen() {
           List Your Asset
         </Text>
       </View>
-      
+
       <ScrollView className="flex-1 px-5 pt-4" contentContainerStyle={{ paddingBottom: 100 }}>
-        
+
         {/* Images */}
         <View className="mb-6">
           <Text variant="label" className="font-bold text-content-secondary uppercase tracking-widest text-[10px] mb-2">
@@ -123,7 +123,7 @@ export default function CreateScreen() {
             {images.map((uri, idx) => (
               <View key={idx} className="w-24 h-24 mr-3 rounded-xl overflow-hidden relative">
                 <Image source={{ uri }} className="w-full h-full" resizeMode="cover" />
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => removeImage(idx)}
                   className="absolute top-1 right-1 bg-black/50 p-1 rounded-full"
                 >
@@ -132,7 +132,7 @@ export default function CreateScreen() {
               </View>
             ))}
             {images.length < 5 && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={pickImages}
                 className="w-24 h-24 rounded-xl border border-dashed border-content-secondary/30 items-center justify-center bg-surface-base"
               >
@@ -189,7 +189,7 @@ export default function CreateScreen() {
           />
         </View>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={handleSubmit}
           disabled={isSubmitting}
           className="bg-brand-teal w-full py-4 rounded-xl items-center flex-row justify-center shadow-lg shadow-brand-teal/20"

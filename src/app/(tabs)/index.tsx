@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { View, FlatList, ActivityIndicator, RefreshControl, TouchableOpacity, Image } from "react-native";
+import { View, FlatList, ActivityIndicator, RefreshControl, TouchableOpacity, Image, Alert, ScrollView, TextInput } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Text } from "@/components/ui/Text";
@@ -7,6 +7,10 @@ import PostCard, { Post } from "@/components/ui/PostCard";
 import ProductCard, { Product } from "@/components/ui/ProductCard";
 import { useAuth } from "@/providers/AuthProvider";
 import firestore from "@react-native-firebase/firestore";
+import { toggleUpvote, toggleWishlist } from "@/lib/social";
+import { FeedSkeleton } from "@/components/ui/SkeletonCard";
+import { Bell, Moon, Sun, Feather } from "lucide-react-native";
+import { useColorScheme } from "nativewind";
 
 type FeedItem = 
   | { type: 'post'; data: Post & { feedScore?: number }; timestamp: number }
@@ -27,6 +31,11 @@ export default function FeedScreen() {
   const [wishlistedIds, setWishlistedIds] = useState<Set<string>>(new Set());
 
   const [contentType, setContentType] = useState<'all' | 'posts' | 'marketplace'>('all');
+  const { colorScheme, setColorScheme } = useColorScheme();
+  
+  const toggleTheme = () => {
+    setColorScheme(colorScheme === 'dark' ? 'light' : 'dark');
+  };
 
   // Listen to approved posts
   useEffect(() => {
@@ -182,12 +191,28 @@ export default function FeedScreen() {
     setTimeout(() => setRefreshing(false), 1000);
   }, []);
 
-  const handleUpvote = (post: Post) => {
-    // Stub
+  const handleUpvote = async (post: Post) => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'You need to sign in to upvote posts.');
+      return;
+    }
+    try {
+      await toggleUpvote(post.id, user.uid);
+    } catch (err) {
+      console.error('Upvote error:', err);
+    }
   };
 
-  const handleToggleWishlist = (product: Product) => {
-    // Stub
+  const handleToggleWishlist = async (product: Product) => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'You need to sign in to save items.');
+      return;
+    }
+    try {
+      await toggleWishlist(product.id, user.uid);
+    } catch (err) {
+      console.error('Wishlist error:', err);
+    }
   };
 
   const renderItem = ({ item }: { item: FeedItem }) => {
@@ -196,7 +221,7 @@ export default function FeedScreen() {
         <PostCard 
           post={item.data} 
           hasUpvoted={upvotedPostIds.has(item.data.id)}
-          onPress={() => {}}
+          onPress={() => router.push(`/post/${item.data.id}` as any)}
           onUpvote={() => handleUpvote(item.data)}
         />
       );
@@ -205,7 +230,7 @@ export default function FeedScreen() {
         <ProductCard 
           product={item.data} 
           isWishlisted={wishlistedIds.has(item.data.id)}
-          onPress={() => {}}
+          onPress={() => router.push(`/product/${item.data.id}` as any)}
           onToggleWishlist={() => handleToggleWishlist(item.data)}
         />
       );
@@ -216,30 +241,46 @@ export default function FeedScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={['top']}>
-      <View className="px-5 py-4 bg-surface/90">
-        <Image 
-          source={require('../../../assets/images/logo.png')} 
-          className="h-8 w-40 mb-3"
-          resizeMode="contain"
-        />
-        
-        {/* Toggle Switch */}
-        <View className="flex-row bg-surface-soft p-1 rounded-xl">
+      <View className="bg-surface px-5 pt-4">
+        {/* Top Header */}
+        <View className="flex-row items-center justify-between mb-4">
+          <View className="flex-row items-center">
+            <Image 
+              source={require('../../../assets/images/logo.png')} 
+              className="h-7 w-7 mr-2"
+              resizeMode="contain"
+            />
+            <Text variant="h2" className="text-xl font-bold tracking-tight">
+              nextbench
+            </Text>
+          </View>
+          <View className="flex-row items-center gap-4">
+            <TouchableOpacity onPress={toggleTheme} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              {colorScheme === 'dark' ? <Sun size={20} color="#FFFFFF" /> : <Moon size={20} color="#1D1D1F" />}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/notifications')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Bell size={20} color={colorScheme === 'dark' ? '#FFFFFF' : '#1D1D1F'} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Sub-tabs */}
+        <View className="flex-row border-b border-content-secondary/10">
           {(['all', 'posts', 'marketplace'] as const).map(type => (
             <TouchableOpacity
               key={type}
               onPress={() => setContentType(type)}
-              className={`flex-1 items-center justify-center py-2 rounded-lg ${
-                contentType === type ? 'bg-white shadow-sm' : ''
+              className={`mr-6 py-3 ${
+                contentType === type ? 'border-b-2 border-content' : 'border-b-2 border-transparent'
               }`}
             >
               <Text 
                 variant="label" 
-                className={`text-[12px] capitalize font-bold ${
-                  contentType === type ? 'text-brand-teal' : 'text-content-tertiary'
+                className={`text-[13px] capitalize ${
+                  contentType === type ? 'font-bold text-content' : 'font-medium text-content-secondary'
                 }`}
               >
-                {type}
+                {type === 'all' ? 'For you' : type}
               </Text>
             </TouchableOpacity>
           ))}
@@ -247,15 +288,41 @@ export default function FeedScreen() {
       </View>
 
       {isLoading ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#0071E3" />
-        </View>
+        <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+          <FeedSkeleton />
+        </ScrollView>
       ) : (
         <FlatList
           data={feedItems}
           keyExtractor={item => `${item.type}-${item.data.id}`}
           renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
+          ListHeaderComponent={
+            <View className="px-5 py-4 border-b-[0.5px] border-content-secondary/10">
+              <View className="flex-row items-center">
+                <View className="w-10 h-10 rounded-full bg-brand-teal/10 overflow-hidden mr-3 border border-brand-teal/20">
+                  {userData?.profilePicture ? (
+                    <Image source={{ uri: userData.profilePicture }} className="w-full h-full" />
+                  ) : (
+                    <View className="w-full h-full items-center justify-center">
+                      <Text variant="label" className="text-brand-teal">
+                        {userData?.name?.[0]?.toUpperCase() || '?'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <TouchableOpacity 
+                  onPress={() => router.push('/post/create' as any)}
+                  className="flex-1 h-11 px-5 rounded-full bg-surface-soft dark:bg-surface-dark-secondary justify-center"
+                  activeOpacity={0.7}
+                >
+                  <Text variant="body" className="text-content-tertiary text-[15px]">
+                    What's on your mind?
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          }
+          contentContainerStyle={{ paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0071E3" />
@@ -270,6 +337,30 @@ export default function FeedScreen() {
           }
         />
       )}
+
+      {/* Floating Compose FAB — Substack-style quill */}
+      <TouchableOpacity
+        onPress={() => router.push('/post/create' as any)}
+        activeOpacity={0.85}
+        style={{
+          position: 'absolute',
+          bottom: 100,
+          right: 20,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: '#0071E3',
+          alignItems: 'center',
+          justifyContent: 'center',
+          shadowColor: '#0071E3',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.35,
+          shadowRadius: 12,
+          elevation: 8,
+        }}
+      >
+        <Feather size={24} color="#FFFFFF" />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, ScrollView, ActivityIndicator, Image, TouchableOpacity } from "react-native";
+import { View, ScrollView, ActivityIndicator, Image, TouchableOpacity, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Text } from "@/components/ui/Text";
@@ -8,6 +8,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { fetchDocument } from "@/services/firebase/firestore";
 import { Product } from "@/components/ui/ProductCard";
 import firestore from "@react-native-firebase/firestore";
+import { toggleWishlist, getOrCreateDMRoom } from "@/lib/social";
 
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -50,8 +51,31 @@ export default function ProductDetailScreen() {
     return () => unsubscribe();
   }, [user, id]);
 
-  const handleToggleWishlist = () => {
-    // Stub
+  const handleToggleWishlist = async () => {
+    if (!user || !id) {
+      Alert.alert('Sign In Required', 'You need to sign in to save items.');
+      return;
+    }
+    try {
+      await toggleWishlist(id, user.uid);
+    } catch (err) {
+      console.error('Wishlist toggle error:', err);
+    }
+  };
+
+  const handleContactSeller = async () => {
+    if (!user || !product) return;
+    if (user.uid === product.sellerId) {
+      Alert.alert('Your Listing', 'You cannot message yourself.');
+      return;
+    }
+    try {
+      const roomId = await getOrCreateDMRoom(user.uid, product.sellerId);
+      router.push(`/chat/${roomId}` as any);
+    } catch (err) {
+      console.error('Contact seller error:', err);
+      Alert.alert('Error', 'Failed to start conversation. Please try again.');
+    }
   };
 
   if (loading) {
@@ -175,7 +199,7 @@ export default function ProductDetailScreen() {
             <Text variant="caption" className="text-[10px] font-bold uppercase tracking-widest text-content-secondary/60 mb-4">
               Listed by Verified Student
             </Text>
-            <TouchableOpacity className="flex-row items-center gap-4 bg-surface-soft p-4 rounded-2xl">
+            <TouchableOpacity onPress={() => router.push(`/profile/${product.sellerId}` as any)} className="flex-row items-center gap-4 bg-surface-soft p-4 rounded-2xl">
               <View className="w-12 h-12 rounded-full bg-brand-teal/10 items-center justify-center">
                 <Text variant="h3" className="text-brand-teal font-serif">
                   {product.sellerName?.[0]?.toUpperCase() || 'U'}
@@ -198,6 +222,13 @@ export default function ProductDetailScreen() {
       {/* Bottom CTA */}
       <View className="absolute bottom-0 left-0 right-0 p-5 bg-surface/95 border-t border-content-secondary/10 pb-8">
         <TouchableOpacity 
+          onPress={
+            isSold
+              ? undefined
+              : user?.uid === product.sellerId
+              ? undefined
+              : handleContactSeller
+          }
           disabled={isSold || (user?.uid === product.sellerId)}
           className={`w-full py-4 rounded-xl items-center justify-center shadow-lg ${
             isSold 

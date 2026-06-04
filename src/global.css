@@ -4,8 +4,8 @@
 
 @layer base {
   :root {
-    --color-surface-base: #F5F5F7;
-    --color-surface-soft: #EBEBED;
+    --color-surface-base: #FFFFFF;
+    --color-surface-soft: #F9FAFB;
     --color-surface-card: #FFFFFF;
     --color-surface-elevated: #FFFFFF;
     --color-luxury-ink: #1D1D1F;
@@ -35,10 +35,10 @@
   }
   
   .dark:root {
-    --color-surface-base: #0D0F14;
-    --color-surface-soft: #131722;
-    --color-surface-card: #131722;
-    --color-surface-elevated: #171C28;
+    --color-surface-base: #000000;
+    --color-surface-soft: #1A1A1E;
+    --color-surface-card: #1C1C1E;
+    --color-surface-elevated: #2C2C2E;
     --color-luxury-ink: #FFFFFF;
     --color-luxury-ink-muted: #9CA3AF;
     --color-luxury-ink-faint: #4B5563;

@@ -14,24 +14,24 @@ import { Text as RNText, type TextProps as RNTextProps } from "react-native";
 
 // ─── Variant Styles ─────────────────────────────────────────────────
 const variantClasses = {
-  /** Large title — 30px bold */
-  h1: "text-3xl font-sans-bold text-content dark:text-content-dark",
-  /** Section title — 24px bold */
-  h2: "text-2xl font-sans-bold text-content dark:text-content-dark",
-  /** Subsection title — 20px semibold */
-  h3: "text-xl font-sans-semibold text-content dark:text-content-dark",
-  /** Card title — 18px semibold */
-  h4: "text-lg font-sans-semibold text-content dark:text-content-dark",
-  /** Body text — 16px regular */
-  body: "text-base font-sans text-content dark:text-content-dark",
-  /** Secondary body — 14px regular, muted */
+  /** Large title — 28px medium */
+  h1: "text-[28px] font-sans-semibold text-content dark:text-content-dark leading-tight",
+  /** Section title — 22px medium */
+  h2: "text-[22px] font-sans-semibold text-content dark:text-content-dark leading-snug",
+  /** Subsection title — 19px medium */
+  h3: "text-[19px] font-sans-medium text-content dark:text-content-dark leading-snug",
+  /** Card title — 17px medium */
+  h4: "text-[17px] font-sans-medium text-content dark:text-content-dark leading-normal",
+  /** Body text — 17px regular, generous line height */
+  body: "text-[17px] font-sans text-content dark:text-content-dark leading-relaxed",
+  /** Secondary body — 15px regular, muted */
   bodySmall:
-    "text-sm font-sans text-content-secondary dark:text-content-dark-secondary",
-  /** Caption text — 12px regular, muted */
+    "text-[15px] font-sans text-content-secondary dark:text-content-dark-secondary leading-relaxed",
+  /** Caption text — 13px regular, muted */
   caption:
-    "text-xs font-sans text-content-tertiary dark:text-content-dark-tertiary",
-  /** Label text — 14px medium */
-  label: "text-sm font-sans-medium text-content dark:text-content-dark",
+    "text-[13px] font-sans text-content-tertiary dark:text-content-dark-tertiary leading-normal",
+  /** Label text — 15px medium */
+  label: "text-[15px] font-sans-medium text-content dark:text-content-dark leading-normal",
   /** Button text — 16px semibold */
   button: "text-base font-sans-semibold",
 } as const;
