@@ -11,6 +11,7 @@ import { toggleUpvote, toggleWishlist } from "@/lib/social";
 import { FeedSkeleton } from "@/components/ui/SkeletonCard";
 import { Bell, Moon, Sun, Feather } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
+import { useFollowingIds } from "@/lib/follows";
 
 type FeedItem = 
   | { type: 'post'; data: Post & { feedScore?: number }; timestamp: number }
@@ -18,6 +19,7 @@ type FeedItem =
 
 export default function FeedScreen() {
   const { user, userData } = useAuth();
+  const { followingIds } = useFollowingIds();
   
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -146,44 +148,135 @@ export default function FeedScreen() {
 
   // Feed scoring and mixing
   const feedItems = useMemo(() => {
-    const now = Date.now();
-    const scoredPosts: FeedItem[] = rawPosts.map(post => {
-      const postTime = post.createdAt?.toMillis?.() || now;
-      const hoursPassed = Math.max(0, (now - postTime) / (1000 * 60 * 60));
-      const baseHype = ((post.upvotesCount || 0) * 2) + ((post.repliesCount || 0) * 3);
-      const timePenalty = hoursPassed * 0.5;
-      const cityBoost = (userData?.city && post.city === userData.city) ? 10 : 0;
-      const schoolBoost = (userData?.school && post.school === userData.school) ? 15 : 0;
+    // 1. Combine posts and products into a single pool
+    const allItems = [
+      ...rawPosts.map(p => ({ ...p, _type: 'post' as const })),
+      ...products.map(p => ({ ...p, _type: 'product' as const }))
+    ];
+
+    if (contentType === 'for-you' || contentType === 'all') {
+      const now = Date.now();
       
-      const feedScore = baseHype - timePenalty + cityBoost + schoolBoost;
-      return { type: 'post' as const, data: { ...post, feedScore }, timestamp: postTime };
-    });
+      // 2. Score each item
+      const scoredItems = allItems.map(item => {
+        let score = 0;
+        
+        // Base score depends on type
+        if (item._type === 'post') {
+          score = (item.upvotesCount || 0) * 2 + (item.repliesCount || 0) * 3;
+          
+          // Boosts for relevance
+          if (followingIds.has(item.authorId)) score += 20; // Following boost
+          if (userData?.school && item.school === userData.school) score += 15; // School boost
+          if (userData?.city && item.city === userData.city) score += 10; // City boost
+          
+          // Confessions get a small bump in evening/night hours (local time)
+          const hour = new Date().getHours();
+          if (item.type === 'confession' && (hour >= 18 || hour < 4)) {
+            score += 10;
+          }
+        } else {
+          // Products base score
+          score = 15; // Start with decent baseline
+          if (userData?.school && item.sellerSchool === userData.school) score += 15;
+          if (userData?.city && item.city === userData.city) score += 10;
+          if (item.status === 'sold') score -= 50; // Heavily penalize sold items
+        }
 
-    const mappedProducts: FeedItem[] = products.map(product => {
-      const productTime = product.createdAt?.toMillis?.() || now;
-      return { type: 'product' as const, data: product, timestamp: productTime };
-    });
+        // Time decay (gentle decay over 48h)
+        const itemTime = item.createdAt?.toMillis?.() || Date.now();
+        const hoursAgo = Math.max(0.5, (now - itemTime) / (1000 * 60 * 60));
+        
+        // Velocity (engagement / time)
+        const velocity = item._type === 'post' 
+          ? ((item.upvotesCount || 0) + (item.repliesCount || 0) * 1.5) / hoursAgo
+          : 0;
+        
+        score += Math.min(velocity * 2, 25); // Cap velocity bonus at +25
+        
+        // Apply time decay multiplier
+        const timeMultiplier = 1 / Math.pow(1 + hoursAgo * 0.05, 1.2);
+        const finalScore = score * timeMultiplier;
 
-    let mixed: FeedItem[] = [];
-
-    if (contentType === 'all') {
-      mixed = [...scoredPosts, ...mappedProducts];
-      mixed.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    } else if (contentType === 'posts') {
-      mixed = scoredPosts;
-      mixed.sort((a, b) => {
-        const scoreA = (a.data as Post & { feedScore?: number }).feedScore || 0;
-        const scoreB = (b.data as Post & { feedScore?: number }).feedScore || 0;
-        if (scoreA !== scoreB) return scoreB - scoreA;
-        return (b.timestamp || 0) - (a.timestamp || 0);
+        return { item, finalScore, hoursAgo };
       });
-    } else if (contentType === 'marketplace') {
-      mixed = mappedProducts;
-      mixed.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    }
 
-    return mixed;
-  }, [rawPosts, products, userData, contentType]);
+      // 3. Sort by raw score
+      scoredItems.sort((a, b) => b.finalScore - a.finalScore);
+
+      // 4. Enforce diversity (max 2 posts per author in top 20, interleave products)
+      const finalFeed: any[] = [];
+      const authorCounts = new Map<string, number>();
+      const unusedProducts: any[] = [];
+
+      for (const { item, hoursAgo } of scoredItems) {
+        if (item._type === 'product') {
+          // Keep products in a separate queue to interleave them
+          if (item.status !== 'sold' || finalFeed.length > 10) {
+            unusedProducts.push(item);
+          }
+          continue;
+        }
+
+        // Check author diversity
+        const authorId = item.authorId;
+        const count = authorCounts.get(authorId) || 0;
+        
+        // Skip if this author dominates the top of the feed, unless it's very recent (breaking news/viral)
+        if (count >= 2 && finalFeed.length < 20 && hoursAgo > 2) {
+          continue;
+        }
+
+        authorCounts.set(authorId, count + 1);
+        finalFeed.push(item);
+
+        // Interleave a product every 4 posts
+        if (finalFeed.length % 4 === 0 && unusedProducts.length > 0) {
+          finalFeed.push(unusedProducts.shift());
+        }
+      }
+
+      // Add remaining products to the end
+      finalFeed.push(...unusedProducts);
+      
+      // Map back to FeedItem interface
+      return finalFeed.map(item => ({
+        type: item._type,
+        data: item,
+        timestamp: item.createdAt?.toMillis?.() || 0
+      })) as FeedItem[];
+    } 
+    
+    // 'posts' tab: chronological sorted posts only
+    else if (contentType === 'posts') {
+      return [...rawPosts].sort((a, b) => {
+        const timeA = a.createdAt?.toMillis?.() || 0;
+        const timeB = b.createdAt?.toMillis?.() || 0;
+        return timeB - timeA;
+      }).map(p => ({
+        type: 'post',
+        data: p,
+        timestamp: p.createdAt?.toMillis?.() || 0
+      })) as FeedItem[];
+    } 
+    
+    // 'market' tab: chronological sorted products only
+    else {
+      return [...products].sort((a, b) => {
+        // Push sold items to bottom
+        if (a.status === 'sold' && b.status !== 'sold') return 1;
+        if (a.status !== 'sold' && b.status === 'sold') return -1;
+        
+        const timeA = a.createdAt?.toMillis?.() || 0;
+        const timeB = b.createdAt?.toMillis?.() || 0;
+        return timeB - timeA;
+      }).map(p => ({
+        type: 'product',
+        data: p,
+        timestamp: p.createdAt?.toMillis?.() || 0
+      })) as FeedItem[];
+    }
+  }, [rawPosts, products, contentType, followingIds, userData]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

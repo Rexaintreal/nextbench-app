@@ -142,7 +142,7 @@ export default function OtherProfileScreen() {
   const handleMessage = async () => {
     if (!user || !profileId) return;
     try {
-      const roomId = await getOrCreateDMRoom(user.uid, profileId);
+      const { roomId, isPending } = await getOrCreateDMRoom(user.uid, profileId, profileData);
       router.push(`/chat/${roomId}` as any);
     } catch (err) {
       Alert.alert("Error", "Failed to start conversation.");

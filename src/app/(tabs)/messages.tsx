@@ -15,6 +15,9 @@ interface ChatRoom {
   updatedAt: any;
   productTitle: string;
   type?: string;
+  status?: 'active' | 'pending';
+  requestedBy?: string;
+  unreadBy?: string[];
   otherUser?: any;
 }
 
@@ -110,6 +113,14 @@ export default function MessagesScreen() {
     room.otherUser?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Split into requests (pending rooms where I'm the recipient) and active chats
+  const pendingRequests = filteredRooms.filter(
+    room => room.status === 'pending' && room.requestedBy && room.requestedBy !== user?.uid
+  );
+  const activeRooms = filteredRooms.filter(
+    room => !(room.status === 'pending' && room.requestedBy && room.requestedBy !== user?.uid)
+  );
+
   const renderItem = ({ item }: { item: ChatRoom }) => {
     const isUnread = item.unreadBy?.includes(user?.uid || "") && item.lastSenderId !== user?.uid;
     return (
@@ -186,10 +197,32 @@ export default function MessagesScreen() {
         </View>
       ) : (
         <FlatList
-          data={filteredRooms}
+          data={activeRooms}
           keyExtractor={item => item.id}
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 100 }}
+          ListHeaderComponent={
+            pendingRequests.length > 0 ? (
+              <View className="mb-2">
+                <View className="px-5 pt-3 pb-2 flex-row items-center gap-2">
+                  <Text variant="label" className="font-sans-semibold text-amber-600 dark:text-amber-400">
+                    Chat Requests
+                  </Text>
+                  <View className="bg-amber-500 rounded-full px-2 py-0.5">
+                    <Text variant="caption" className="text-white text-[11px] font-sans-bold">
+                      {pendingRequests.length}
+                    </Text>
+                  </View>
+                </View>
+                {pendingRequests.map(item => (
+                  <View key={item.id}>
+                    {renderItem({ item })}
+                  </View>
+                ))}
+                <View className="h-[0.5px] mx-5 mt-1" style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }} />
+              </View>
+            ) : null
+          }
           ItemSeparatorComponent={() => (
             <View className="h-[0.5px] ml-[76px] mr-5" style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }} />
           )}

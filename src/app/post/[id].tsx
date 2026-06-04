@@ -498,12 +498,12 @@ export default function PostDetailScreen() {
             {postImages.map((url: string, idx: number) => (
               <View
                 key={idx}
-                className="w-full aspect-video rounded-xl overflow-hidden mb-3 bg-surface-soft dark:bg-surface-dark-secondary"
+                className="w-full aspect-[4/3] rounded-xl overflow-hidden mb-3 bg-surface-soft dark:bg-surface-dark-secondary"
               >
                 <Image
                   source={{ uri: url }}
                   className="w-full h-full"
-                  resizeMode="cover"
+                  resizeMode="contain"
                 />
               </View>
             ))}

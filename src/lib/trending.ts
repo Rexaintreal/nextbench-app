@@ -18,6 +18,7 @@ export interface TrendablePost {
   upvotesCount: number;
   repliesCount: number;
   sharesCount?: number;
+  isAnonymous?: boolean;
   createdAt: any;
 }
 

@@ -136,12 +136,19 @@ export default function PostCard({ post, hasUpvoted, onPress, onUpvote, onAuthor
 
       {/* Image */}
       {hasImage && (
-        <View className="w-full h-52 rounded-xl overflow-hidden mb-3 bg-surface-soft dark:bg-surface-dark-secondary">
+        <View className="w-full aspect-[4/3] rounded-xl overflow-hidden mb-3 bg-surface-soft dark:bg-surface-dark-secondary">
           <Image
             source={{ uri: postImageUrls[0] || '' }}
             className="w-full h-full"
-            resizeMode="cover"
+            resizeMode="contain"
           />
+          {postImageUrls.length > 1 && (
+            <View className="absolute bottom-2 right-2 bg-black/60 px-2 py-0.5 rounded-md">
+              <Text variant="caption" className="text-white text-[11px] font-sans-semibold">
+                +{postImageUrls.length - 1}
+              </Text>
+            </View>
+          )}
         </View>
       )}
 

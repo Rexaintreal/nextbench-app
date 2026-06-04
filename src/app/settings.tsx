@@ -1,3 +1,4 @@
+import { useColorScheme } from "nativewind";
 /**
  * Settings Screen
  *
@@ -27,8 +28,8 @@ import {
   Shield,
   HelpCircle,
 } from "lucide-react-native";
-import { useColorScheme } from "nativewind";
 import auth from "@react-native-firebase/auth";
+import firestore from "@react-native-firebase/firestore";
 
 function SettingsRow({
   icon,
@@ -79,11 +80,25 @@ function SettingsRow({
 }
 
 export default function SettingsScreen() {
-  const { userData } = useAuth();
+  const { user, userData } = useAuth();
   const { colorScheme, setColorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
 
   const iconColor = isDark ? "#FFFFFF" : "#1D1D1F";
+
+  const isFollowersOnlyDM = userData?.chatPrivacy?.followersOnly || false;
+
+  const toggleFollowersOnlyDM = async (val: boolean) => {
+    if (!user) return;
+    try {
+      await firestore().collection("users").doc(user.uid).set({
+        chatPrivacy: { followersOnly: val }
+      }, { merge: true });
+    } catch (err) {
+      console.error("Failed to update chat privacy", err);
+      Alert.alert("Error", "Failed to update privacy settings.");
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert("Log Out", "Are you sure you want to log out?", [
@@ -190,14 +205,16 @@ export default function SettingsScreen() {
             }
           />
           <SettingsRow
-            icon={<Bell size={20} color={iconColor} />}
-            label="Notifications"
-            onPress={() => Alert.alert('Notifications', 'Notification preferences coming soon!')}
-          />
-          <SettingsRow
             icon={<Lock size={20} color={iconColor} />}
-            label="Privacy"
-            onPress={() => Alert.alert('Privacy', 'Privacy settings coming soon!')}
+            label="Only followers can DM me"
+            trailing={
+              <Switch
+                value={isFollowersOnlyDM}
+                onValueChange={toggleFollowersOnlyDM}
+                trackColor={{ false: "#D1D5DB", true: "#0071E3" }}
+                thumbColor="#FFFFFF"
+              />
+            }
           />
         </View>
 

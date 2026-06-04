@@ -88,14 +88,17 @@ export async function toggleWishlist(
 
 /**
  * Find an existing DM room between two users, or create a new one.
- * Returns the room ID.
+ * Returns the room ID and whether it's a pending request.
  *
- * Mirrors web app's lib/dm.ts → getOrCreateDMRoom()
+ * If the target user has `chatPrivacy.followersOnly` enabled and the current
+ * user is NOT following them, the room is created with `status: 'pending'`.
+ * The sender can send exactly 1 message; the recipient must accept to continue.
  */
 export async function getOrCreateDMRoom(
   currentUserId: string,
-  otherUserId: string
-): Promise<string> {
+  otherUserId: string,
+  targetUserData?: { chatPrivacy?: { followersOnly?: boolean } } | null
+): Promise<{ roomId: string; isPending: boolean }> {
   // Query for DM rooms where the current user is a participant
   const q = await firestore()
     .collection("chatRooms")
@@ -107,7 +110,22 @@ export async function getOrCreateDMRoom(
   for (const doc of q.docs) {
     const data = doc.data();
     if (data.participants?.includes(otherUserId)) {
-      return doc.id;
+      return { roomId: doc.id, isPending: data.status === 'pending' };
+    }
+  }
+
+  // Check if we need to create a pending room
+  let isPending = false;
+  if (targetUserData?.chatPrivacy?.followersOnly) {
+    // Check if currentUser follows the target
+    const followSnap = await firestore()
+      .collection("follows")
+      .where("followerId", "==", currentUserId)
+      .where("followingId", "==", otherUserId)
+      .limit(1)
+      .get();
+    if (followSnap.empty) {
+      isPending = true;
     }
   }
 
@@ -119,8 +137,10 @@ export async function getOrCreateDMRoom(
     productTitle: "",
     lastMessage: "",
     lastSenderId: "",
+    status: isPending ? "pending" : "active",
+    requestedBy: isPending ? currentUserId : null,
     updatedAt: firestore.FieldValue.serverTimestamp(),
   });
 
-  return newRoom.id;
+  return { roomId: newRoom.id, isPending };
 }

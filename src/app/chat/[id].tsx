@@ -4,7 +4,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
-import { ArrowLeft, Send, Image as ImageIcon, User, X, Reply, Forward, Trash } from "lucide-react-native";
+import { ArrowLeft, Send, Image as ImageIcon, User, X, Reply, Forward, Trash, MoreVertical } from "lucide-react-native";
+import { blockUser } from "@/lib/blocks";
 import firestore from "@react-native-firebase/firestore";
 import * as ImagePicker from "expo-image-picker";
 import storage from "@react-native-firebase/storage";
@@ -117,6 +118,9 @@ export default function ChatRoomScreen() {
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [forwardChats, setForwardChats] = useState<any[]>([]);
   const [loadingChats, setLoadingChats] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [roomStatus, setRoomStatus] = useState<'active' | 'pending'>('active');
+  const [requestedBy, setRequestedBy] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -138,6 +142,12 @@ export default function ChatRoomScreen() {
               setOtherUser({ id: otherUserId, ...userDoc.data() });
             }
           }
+
+          // Check mute status
+          setIsMuted(roomData?.mutedBy?.includes(user.uid) || false);
+          // Check pending status
+          setRoomStatus(roomData?.status === 'pending' ? 'pending' : 'active');
+          setRequestedBy(roomData?.requestedBy || null);
         }
       } catch (err) {
         console.error("Failed to fetch room info", err);
@@ -200,6 +210,24 @@ export default function ChatRoomScreen() {
 
   const handleSend = async (text?: string, image?: string) => {
     if (!user || !roomId || (!text?.trim() && !image)) return;
+
+    // If this is a pending room and the current user is the requester,
+    // only allow 1 message total
+    if (roomStatus === 'pending' && requestedBy === user.uid) {
+      // Count messages from requester
+      const myMsgsSnap = await firestore()
+        .collection('chatRooms').doc(roomId).collection('messages')
+        .where('senderId', '==', user.uid)
+        .limit(1)
+        .get();
+      if (!myMsgsSnap.empty) {
+        Alert.alert(
+          'Request Pending',
+          'You\'ve already sent a message. Wait for them to accept your chat request.'
+        );
+        return;
+      }
+    }
     
     const messageText = text?.trim();
     setNewMessage("");
@@ -233,16 +261,20 @@ export default function ChatRoomScreen() {
       // Update unread status (simplified)
       await firestore().collection('chatRooms').doc(roomId).update(updateData);
 
-      // Create notification for the other user
+      // Create notification for the other user (skip if they muted this chat)
       if (otherUser?.id && otherUser.id !== user.uid) {
-        // Run asynchronously so it doesn't block the UI
-        createNotification({
-          userId: otherUser.id,
-          type: "new_message",
-          title: `New message from ${userData?.name || "someone"}`,
-          message: image ? "Sent an image" : messageText || "Sent a message",
-          link: `/chat/${roomId}`,
-        }).catch(err => console.warn("Failed to notify user:", err));
+        // Check if other user muted this chat
+        const roomSnap = await firestore().collection('chatRooms').doc(roomId).get();
+        const roomMutedBy: string[] = roomSnap.data()?.mutedBy || [];
+        if (!roomMutedBy.includes(otherUser.id)) {
+          createNotification({
+            userId: otherUser.id,
+            type: "new_message",
+            title: `New message from ${userData?.name || "someone"}`,
+            message: image ? "Sent an image" : messageText || "Sent a message",
+            link: `/chat/${roomId}`,
+          }).catch(err => console.warn("Failed to notify user:", err));
+        }
       }
     } catch (err) {
       console.error("Failed to send message", err);
@@ -364,6 +396,110 @@ export default function ChatRoomScreen() {
     );
   };
 
+  // ─── Chat Management ─────────────────────────────────
+
+  const handleClearChat = () => {
+    Alert.alert(
+      "Clear Chat",
+      "This will clear all messages for you. The other person will still see them.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear",
+          style: "destructive",
+          onPress: async () => {
+            if (!user || !roomId) return;
+            try {
+              const msgsSnap = await firestore()
+                .collection('chatRooms')
+                .doc(roomId)
+                .collection('messages')
+                .get();
+              const batch = firestore().batch();
+              msgsSnap.docs.forEach(doc => {
+                batch.update(doc.ref, {
+                  deletedFor: firestore.FieldValue.arrayUnion(user.uid)
+                });
+              });
+              await batch.commit();
+              Alert.alert("Done", "Chat cleared for you.");
+            } catch (err) {
+              console.error("Clear chat failed", err);
+              Alert.alert("Error", "Failed to clear chat.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleToggleMute = async () => {
+    if (!user || !roomId) return;
+    try {
+      if (isMuted) {
+        await firestore().collection('chatRooms').doc(roomId).update({
+          mutedBy: firestore.FieldValue.arrayRemove(user.uid)
+        });
+        setIsMuted(false);
+        Alert.alert("Unmuted", "You will now receive notifications from this chat.");
+      } else {
+        await firestore().collection('chatRooms').doc(roomId).update({
+          mutedBy: firestore.FieldValue.arrayUnion(user.uid)
+        });
+        setIsMuted(true);
+        Alert.alert("Muted", "You won't receive notifications from this chat.");
+      }
+    } catch (err) {
+      console.error("Mute toggle failed", err);
+    }
+  };
+
+  const handleBlockUser = () => {
+    if (!user || !otherUser?.id) return;
+    Alert.alert(
+      "Block User",
+      `Are you sure you want to block ${otherUser.name || 'this user'}? They won't be able to message you.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await blockUser(user.uid, otherUser.id);
+              Alert.alert("Blocked", `${otherUser.name || 'User'} has been blocked.`);
+              router.back();
+            } catch (err) {
+              console.error("Block failed", err);
+              Alert.alert("Error", "Failed to block user.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const showChatOptions = () => {
+    const options = [
+      "Cancel",
+      "Clear Chat",
+      isMuted ? "Unmute Notifications" : "Mute Notifications",
+      "Block User",
+    ];
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex: 0,
+        destructiveButtonIndex: 3,
+      },
+      (buttonIndex) => {
+        if (buttonIndex === 1) handleClearChat();
+        else if (buttonIndex === 2) handleToggleMute();
+        else if (buttonIndex === 3) handleBlockUser();
+      }
+    );
+  };
+
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -414,7 +550,12 @@ export default function ChatRoomScreen() {
         <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2 mr-2">
           <ArrowLeft size={24} color={colorScheme === 'dark' ? '#FFF' : '#1D1D1F'} />
         </TouchableOpacity>
-        <View className="flex-1 flex-row items-center">
+        <TouchableOpacity
+          className="flex-1 flex-row items-center"
+          activeOpacity={0.7}
+          onPress={() => otherUser?.id && router.push(`/profile/${otherUser.id}` as any)}
+          disabled={!otherUser?.id}
+        >
           <View className="w-10 h-10 rounded-full bg-surface-soft items-center justify-center overflow-hidden mr-3">
             {otherUser?.profilePicture ? (
               <Image source={{ uri: otherUser.profilePicture }} className="w-full h-full" resizeMode="cover" />
@@ -425,7 +566,14 @@ export default function ChatRoomScreen() {
           <Text variant="h3" className="font-bold">
             {otherUser ? otherUser.name : 'Loading...'}
           </Text>
-        </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={showChatOptions}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          className="p-2 -mr-1"
+        >
+          <MoreVertical size={22} color={colorScheme === 'dark' ? '#FFF' : '#1D1D1F'} />
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView 
@@ -446,6 +594,70 @@ export default function ChatRoomScreen() {
             contentContainerStyle={{ paddingVertical: 16 }}
           />
         </ImageBackground>
+
+        {/* Pending Chat Request Banner */}
+        {roomStatus === 'pending' && requestedBy && (
+          requestedBy === user?.uid ? (
+            // I'm the one who sent the request
+            <View className="px-4 py-3 bg-amber-500/10 flex-row items-center justify-center">
+              <Text variant="caption" className="text-amber-600 dark:text-amber-400 font-sans-semibold text-center">
+                ⏳ Chat request pending. They need to accept before you can send more messages.
+              </Text>
+            </View>
+          ) : (
+            // I'm the one receiving the request
+            <View className="px-4 py-3 bg-brand-teal/10">
+              <Text variant="caption" className="text-content-secondary text-center mb-2">
+                {otherUser?.name || 'Someone'} wants to start a conversation.
+              </Text>
+              <View className="flex-row justify-center gap-3">
+                <TouchableOpacity
+                  onPress={() => {
+                    Alert.alert('Decline', 'Are you sure you want to decline this chat request?', [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Decline', style: 'destructive', onPress: async () => {
+                          try {
+                            // Delete the chat room and all messages
+                            const msgsSnap = await firestore()
+                              .collection('chatRooms').doc(roomId).collection('messages').get();
+                            const batch = firestore().batch();
+                            msgsSnap.docs.forEach(d => batch.delete(d.ref));
+                            batch.delete(firestore().collection('chatRooms').doc(roomId));
+                            await batch.commit();
+                            router.back();
+                          } catch (err) {
+                            console.error('Decline failed', err);
+                          }
+                        }
+                      }
+                    ]);
+                  }}
+                  className="px-6 py-2 rounded-full border border-red-400/40"
+                >
+                  <Text variant="caption" className="text-red-500 font-sans-semibold">Decline</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={async () => {
+                    try {
+                      await firestore().collection('chatRooms').doc(roomId).update({
+                        status: 'active',
+                        requestedBy: null,
+                      });
+                      setRoomStatus('active');
+                      setRequestedBy(null);
+                    } catch (err) {
+                      console.error('Accept failed', err);
+                    }
+                  }}
+                  className="px-6 py-2 rounded-full bg-brand-teal"
+                >
+                  <Text variant="caption" className="text-white font-sans-semibold">Accept</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )
+        )}
 
         {/* Input area */}
         <View className="bg-surface dark:bg-surface-dark border-t border-content-secondary/10">

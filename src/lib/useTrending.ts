@@ -40,13 +40,14 @@ export function useTrending(): TrendingData {
         const posts: TrendablePost[] = [];
         snapshot.forEach(docSnap => {
           const data = docSnap.data();
+          const isAnon = data.type === 'confession' && data.isAnonymous;
           posts.push({
             id: docSnap.id,
             title: data.title || '',
             content: data.content || '',
             authorId: data.authorId || '',
-            authorName: data.authorName || 'Unknown',
-            authorProfilePicture: data.authorProfilePicture || null,
+            authorName: isAnon ? 'Anonymous' : (data.authorName || 'Unknown'),
+            authorProfilePicture: isAnon ? null : (data.authorProfilePicture || null),
             school: data.school || '',
             city: data.city,
             type: data.type || 'others',
@@ -55,6 +56,7 @@ export function useTrending(): TrendingData {
             upvotesCount: data.upvotesCount || 0,
             repliesCount: data.repliesCount || 0,
             sharesCount: data.sharesCount || 0,
+            isAnonymous: isAnon,
             createdAt: data.createdAt,
           });
         });

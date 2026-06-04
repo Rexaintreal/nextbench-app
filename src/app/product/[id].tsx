@@ -69,7 +69,7 @@ export default function ProductDetailScreen() {
       return;
     }
     try {
-      const roomId = await getOrCreateDMRoom(user.uid, product.sellerId);
+      const { roomId } = await getOrCreateDMRoom(user.uid, product.sellerId);
       router.push(`/chat/${roomId}` as any);
     } catch (err) {
       console.error('Contact seller error:', err);
