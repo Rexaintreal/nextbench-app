@@ -65,8 +65,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Configure GoogleSignin on mount
   useEffect(() => {
+    console.log("WebClientId:", process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
     GoogleSignin.configure({
-      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+      webClientId: "14134258818-untrtrmtl4u95f0jga661nookhdls37f.apps.googleusercontent.com",
       iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     });
   }, []);

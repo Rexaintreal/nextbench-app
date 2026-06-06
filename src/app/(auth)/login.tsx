@@ -35,14 +35,14 @@ export default function LoginScreen() {
       
       // On success and doc exists, AuthProvider will automatically update userData
       // and _layout.tsx will redirect to /(tabs)
-    } catch (e: any) {
-      if (e.code === "SIGN_IN_CANCELLED") {
-        console.log("User cancelled sign in");
-      } else {
-        setError(getAuthErrorMessage(e));
+      } catch (e: any) {
+        console.log("FULL ERROR:", JSON.stringify(e));
+        console.log("ERROR CODE:", e?.code);
+        console.log("ERROR MESSAGE:", e?.message);
+        console.log("ERROR toString:", String(e));
+        setError(JSON.stringify(e));
+        setIsLoading(false);
       }
-      setIsLoading(false);
-    }
   };
 
   return (

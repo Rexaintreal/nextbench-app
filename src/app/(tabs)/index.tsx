@@ -32,7 +32,7 @@ export default function FeedScreen() {
   const [wishlistedIds, setWishlistedIds] = useState<Set<string>>(new Set());
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
 
-  const [contentType, setContentType] = useState<'all' | 'posts' | 'marketplace'>('all');
+  const [contentType, setContentType] = useState<'all' | 'posts' | 'marketplace' | 'for-you'>('all');
   const { colorScheme, setColorScheme } = useColorScheme();
   
   const toggleTheme = () => {

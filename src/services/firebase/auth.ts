@@ -30,24 +30,29 @@ export function onAuthStateChanged(
  * then authenticates with Firebase.
  */
 export async function signInWithGoogle(): Promise<FirebaseAuthTypes.UserCredential> {
-  // Check if your device supports Google Play
-  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-  
-  // Get the users ID token
+  console.log("Step 1: Checking Play Services...");
+  const hasServices = await GoogleSignin.hasPlayServices({ 
+    showPlayServicesUpdateDialog: true 
+  });
+  console.log("Step 1 OK - Has Play Services:", hasServices);
+
+  console.log("Step 2: Calling GoogleSignin.signIn()...");
   const signInResult = await GoogleSignin.signIn();
+  console.log("Step 2 OK - signInResult:", JSON.stringify(signInResult));
+  
   const idToken = signInResult.data?.idToken;
+  console.log("Step 3: idToken exists:", !!idToken);
 
   if (!idToken) {
     throw new Error("No ID token found");
   }
 
-  // Create a Google credential with the token
+  console.log("Step 4: Creating Firebase credential...");
   const googleCredential = auth.GoogleAuthProvider.credential(idToken);
-
-  // Sign-in the user with the credential
+  
+  console.log("Step 5: Signing in with Firebase...");
   return auth().signInWithCredential(googleCredential);
 }
-
 /**
  * Sign out the current user.
  * Signs out from both Google and Firebase to clear cache.

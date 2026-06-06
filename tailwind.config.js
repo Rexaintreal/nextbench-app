@@ -7,83 +7,116 @@ module.exports = {
     "./src/providers/**/*.{js,jsx,ts,tsx}",
   ],
   presets: [require("nativewind/preset")],
-  darkMode: 'class',
+  // "media" = NativeWind reads the device color scheme automatically.
+  // No <View className="dark"> wrapper needed — it just works.
+  darkMode: "media",
   theme: {
     extend: {
       colors: {
-        // NextBench brand palette (Web)
+        // ── Brand ──────────────────────────────────────────────────────
         brand: {
-          teal: "var(--color-brand-teal)",
-          pink: "var(--color-brand-pink)",
-          "pink-soft": "var(--color-brand-pink-soft)",
-          mint: "var(--color-brand-mint)",
-          500: "var(--color-brand-teal)", // fallback for existing stub
+          teal: "#14b8a6",
+          pink: "#f43f5e",
+          "pink-soft": "#fb7185",
+          mint: "#34C759",
+          500: "#14b8a6",
         },
-        primary: "var(--color-primary)",
-        // Semantic surface colors
+        primary: "#14b8a6",
+
+        // ── Surfaces ───────────────────────────────────────────────────
         surface: {
-          DEFAULT: "var(--color-surface-base)",
-          soft: "var(--color-surface-soft)",
-          card: "var(--color-surface-card)",
-          elevated: "var(--color-surface-elevated)",
-          border: "var(--color-border)",
-          "border-strong": "var(--color-border-strong)",
-          secondary: "var(--color-surface-soft)",
-          tertiary: "var(--color-surface-elevated)",
-          gap: "var(--color-surface-gap)",
+          DEFAULT:  "#FFFFFF",
+          soft:     "#F5F5F7",
+          card:     "#FFFFFF",
+          elevated: "#FFFFFF",
+          gap:      "#F0F0F2",
+          secondary:"#F5F5F7",
+          tertiary: "#FFFFFF",
+
+          dark:            "#000000",
+          "dark-soft":     "#1C1C1E",
+          "dark-card":     "#1C1C1E",
+          "dark-elevated": "#2C2C2E",
+          "dark-gap":      "#0A0A0A",
+          "dark-secondary":"#1C1C1E",
+          "dark-tertiary": "#2C2C2E",
         },
-        "surface-dark": {
-          DEFAULT: "var(--color-surface-base)",
-          secondary: "var(--color-surface-soft)",
-          tertiary: "var(--color-surface-elevated)",
-          border: "var(--color-border)",
-          "border-strong": "var(--color-border-strong)",
+
+        // ── Ink (text) ─────────────────────────────────────────────────
+        ink: {
+          DEFAULT: "#1A1A1C",
+          muted:   "#636366",
+          faint:   "#8E8E93",
+
+          dark:        "#F5F5F7",
+          "dark-muted":"#98989D",
+          "dark-faint":"#636366",
         },
-        glass: {
-          bg: "var(--color-glass-bg)",
-          border: "var(--color-glass-border)",
-        },
-        skeleton: {
-          from: "var(--color-skeleton-from)",
-          via: "var(--color-skeleton-via)",
-        },
-        overlay: {
-          DEFAULT: "var(--color-overlay)",
-          heavy: "var(--color-overlay-heavy)",
-        },
-        confession: {
-          bg: "var(--color-confession-bg)",
-          hover: "var(--color-confession-bg-hover)",
-        },
-        // Semantic text colors
+
+        // ── Content (alias kept for existing className usage) ──────────
         content: {
-          DEFAULT: "var(--color-luxury-ink)",
-          secondary: "var(--color-luxury-ink-muted)",
-          tertiary: "var(--color-luxury-ink-faint)",
-          inverse: "var(--color-surface-base)",
+          DEFAULT:   "#1A1A1C",
+          secondary: "#636366",
+          tertiary:  "#8E8E93",
+          inverse:   "#FFFFFF",
+
+          dark:            "#F5F5F7",
+          "dark-secondary":"#98989D",
+          "dark-tertiary": "#636366",
         },
-        "content-dark": {
-          DEFAULT: "var(--color-luxury-ink)",
-          secondary: "var(--color-luxury-ink-muted)",
-          tertiary: "var(--color-luxury-ink-faint)",
-          inverse: "var(--color-surface-base)",
+
+        // ── Borders ────────────────────────────────────────────────────
+        border: {
+          DEFAULT:      "rgba(0,0,0,0.06)",
+          strong:       "rgba(0,0,0,0.12)",
+          dark:         "rgba(255,255,255,0.08)",
+          "dark-strong":"rgba(255,255,255,0.14)",
         },
-        // Legacy stubs
-        text: {
-          secondary: "var(--color-luxury-ink-muted)",
+
+        // ── Glass ──────────────────────────────────────────────────────
+        glass: {
+          bg:           "rgba(255,255,255,0.72)",
+          border:       "rgba(255,255,255,0.28)",
+          "dark-bg":    "rgba(28,28,30,0.88)",
+          "dark-border":"rgba(255,255,255,0.08)",
         },
-        "text-secondary": {
-          dark: "var(--color-luxury-ink-muted)",
+
+        // ── Skeleton ───────────────────────────────────────────────────
+        skeleton: {
+          from:       "#E8E8ED",
+          via:        "#DCDCE2",
+          "dark-from":"#1C1C1E",
+          "dark-via": "#2C2C2E",
         },
+
+        // ── Overlays ───────────────────────────────────────────────────
+        overlay: {
+          DEFAULT:      "rgba(0,0,0,0.18)",
+          heavy:        "rgba(0,0,0,0.58)",
+          "dark-DEFAULT":"rgba(0,0,0,0.45)",
+          "dark-heavy": "rgba(0,0,0,0.80)",
+        },
+
+        // ── Confession posts ───────────────────────────────────────────
+        confession: {
+          bg:          "rgba(147,51,234,0.04)",
+          hover:       "rgba(147,51,234,0.07)",
+          "dark-bg":   "rgba(147,51,234,0.03)",
+          "dark-hover":"rgba(147,51,234,0.05)",
+        },
+
+        // ── Status ─────────────────────────────────────────────────────
         error: {
-          DEFAULT: "var(--color-error)",
+          DEFAULT: "#FF3B30",
+          dark:    "#FF453A",
         },
       },
+
       fontFamily: {
-        sans: ["Inter_400Regular"],
-        "sans-medium": ["Inter_500Medium"],
-        "sans-semibold": ["Inter_600SemiBold"],
-        "sans-bold": ["Inter_700Bold"],
+        sans:           ["Inter_400Regular"],
+        "sans-medium":  ["Inter_500Medium"],
+        "sans-semibold":["Inter_600SemiBold"],
+        "sans-bold":    ["Inter_700Bold"],
       },
     },
   },

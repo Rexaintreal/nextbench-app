@@ -1,44 +1,37 @@
-/**
- * Cloudinary Storage Helper for React Native
- * We use Cloudinary instead of Firebase Storage to keep the app 100% free
- */
+import * as FileSystem from 'expo-file-system/legacy';
 
 const CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
-/**
- * Uploads a local image URI to Cloudinary via unauthenticated REST API.
- */
 export async function uploadToCloudinary(uri: string, folder: string): Promise<string> {
   if (!CLOUD_NAME || !UPLOAD_PRESET) {
     throw new Error('Cloudinary environment variables are missing.');
   }
 
-  const formData = new FormData();
-  
-  // In React Native, we can append a file to FormData by providing an object with uri, name, and type
+  // Read file as base64 using expo-file-system — bypasses fetch/blob issues on Android
+  const base64 = await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
   const filename = uri.split('/').pop() || 'upload.jpg';
   const match = /\.(\w+)$/.exec(filename);
-  const type = match ? `image/${match[1]}` : 'image/jpeg';
-
-  // @ts-ignore - React Native's FormData allows this object format
-  formData.append('file', {
-    uri,
-    name: filename,
-    type,
-  });
+  const mimeType = match ? `image/${match[1].toLowerCase()}` : 'image/jpeg';
   
-  formData.append('upload_preset', UPLOAD_PRESET);
+  // Cloudinary accepts base64 data URIs directly as the file field
+  const dataUri = `data:${mimeType};base64,${base64}`;
+
+  const formData = new FormData();
+  formData.append('file', dataUri);
+  formData.append('upload_preset', UPLOAD_PRESET!);
   formData.append('folder', folder);
 
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-    method: 'POST',
-    body: formData,
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'multipart/form-data',
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
+    {
+      method: 'POST',
+      body: formData,
     }
-  });
+  );
 
   if (!response.ok) {
     const errorData = await response.json();

@@ -12,7 +12,7 @@ import { ArrowRight, CheckCircle, Camera, CreditCard, ShieldCheck } from 'lucide
 
 export default function VerificationScreen() {
   const { user, userData } = useAuth();
-  
+  const router = useRouter();
   const [step, setStep] = useState(1);
   const [isUploading, setIsUploading] = useState(false);
   
