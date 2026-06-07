@@ -2,18 +2,15 @@
  * Root Layout
  *
  * Provider composition order (outermost first):
- * 1. QueryProvider — server state available everywhere
- * 2. AuthProvider  — auth state
- * 3. Navigation    — renders the current route
- *
- * Dark mode is handled automatically by NativeWind via darkMode: "media"
- * in tailwind.config.js — no wrapper View or ThemeProvider needed.
+ * 1. QueryProvider  — server state available everywhere
+ * 2. ThemeProvider  — persists color scheme to AsyncStorage
+ * 3. AuthProvider   — auth state
+ * 4. Navigation     — renders the current route
  */
 
 import "../global.css";
 
 import React, { useEffect } from "react";
-import { useColorScheme } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -31,14 +28,15 @@ import {
 
 import { QueryProvider } from "@/providers/QueryProvider";
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
+import { ThemeProvider, useTheme } from "@/providers/ThemeProvider";
 
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
   const { isAuthenticated, userData, isLoading, user } = useAuth();
+  const { isDark } = useTheme();
   const segments = useSegments();
   const router = useRouter();
-  const colorScheme = useColorScheme(); // used only for StatusBar style
 
   // Auth-based navigation
   useEffect(() => {
@@ -105,12 +103,7 @@ function RootLayoutNav() {
   return (
     <>
       <Stack screenOptions={{ headerShown: false }} />
-      {/*
-        StatusBar style:
-        - dark mode  → text/icons should be light → style="light"
-        - light mode → text/icons should be dark  → style="dark"
-      */}
-      <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+      <StatusBar style={isDark ? "light" : "dark"} />
     </>
   );
 }
@@ -135,9 +128,11 @@ export default function RootLayout() {
 
   return (
     <QueryProvider>
-      <AuthProvider>
-        <RootLayoutNav />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <RootLayoutNav />
+        </AuthProvider>
+      </ThemeProvider>
     </QueryProvider>
   );
 }

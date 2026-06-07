@@ -35,15 +35,12 @@ export default function ProfileScreen() {
     setModalLoading(true);
     setModalType(type);
     setModalUsers([]);
-
     try {
       const snap = await firestore()
         .collection('follows')
         .where(type === 'followers' ? 'followingId' : 'followerId', '==', user.uid)
         .get();
-        
       const ids = snap.docs.map(d => type === 'followers' ? d.data().followerId : d.data().followingId);
-      
       if (ids.length > 0) {
         const userSnaps = await Promise.all(
           ids.slice(0, 50).map(id => firestore().collection('users').doc(id).get())
@@ -59,8 +56,6 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     if (!user) return;
-    
-    // Fetch listings
     const unsubListings = firestore()
       .collection('products')
       .where('sellerId', '==', user.uid)
@@ -71,8 +66,6 @@ export default function ProfileScreen() {
         setMyListings(products);
         setLoadingListings(false);
       });
-
-    // Fetch posts
     const unsubPosts = firestore()
       .collection('posts')
       .where('authorId', '==', user.uid)
@@ -83,60 +76,46 @@ export default function ProfileScreen() {
         setMyPosts(posts);
         setLoadingPosts(false);
       });
-      
-    // Fetch playlist (saved posts)
     const unsubPlaylist = firestore()
       .collection('saved_posts')
       .where('userId', '==', user.uid)
-      .orderBy('createdAt', 'desc')
+      // Removed orderBy('createdAt') — it requires a composite Firestore index
+      // and silently hangs loading forever if that index doesn't exist or if
+      // any doc is missing the 'createdAt' field (no error callback was wired up).
       .onSnapshot(async snap => {
-        if (!snap) return;
-        if (snap.empty) {
-          setSavedPosts([]);
-          setLoadingPlaylist(false);
-          return;
-        }
-        
+        if (!snap) { setLoadingPlaylist(false); return; }
+        if (snap.empty) { setSavedPosts([]); setLoadingPlaylist(false); return; }
         try {
-          const postIds = snap.docs.map(doc => doc.data().postId);
-          // Fetch the actual posts. Firestore 'in' query supports up to 30.
-          // For a robust implementation we slice into chunks of 30, but simple approach:
-          const chunks = [];
-          for (let i = 0; i < postIds.length; i += 30) {
-            chunks.push(postIds.slice(i, i + 30));
-          }
-          
+          const postIds = snap.docs.map(doc => doc.data().postId).filter(Boolean) as string[];
+          if (postIds.length === 0) { setSavedPosts([]); setLoadingPlaylist(false); return; }
+          const chunks: string[][] = [];
+          for (let i = 0; i < postIds.length; i += 30) chunks.push(postIds.slice(i, i + 30));
           let allPosts: Post[] = [];
           for (const chunk of chunks) {
             const postsSnap = await firestore()
               .collection('posts')
-              .where(firestore.FieldPath.documentId ? firestore.FieldPath.documentId() : '__name__', 'in', chunk)
+              .where(firestore.FieldPath.documentId(), 'in', chunk)
               .get();
-              
-            postsSnap.forEach(doc => {
-              allPosts.push({ id: doc.id, ...doc.data() } as Post);
-            });
+            postsSnap.forEach(doc => allPosts.push({ id: doc.id, ...doc.data() } as Post));
           }
-          
-          // Re-sort them based on saved_posts order
+          // Sort client-side: most-recently saved first
           allPosts.sort((a, b) => postIds.indexOf(a.id) - postIds.indexOf(b.id));
-          
           setSavedPosts(allPosts);
         } catch (e) {
           console.error("Failed to fetch saved posts", e);
+          setSavedPosts([]);
         } finally {
           setLoadingPlaylist(false);
         }
+      }, (e) => {
+        // Without this error callback a failed query hangs loading indefinitely
+        console.error("saved_posts snapshot error:", e);
+        setSavedPosts([]);
+        setLoadingPlaylist(false);
       });
-
-    return () => {
-      unsubListings();
-      unsubPosts();
-      unsubPlaylist();
-    };
+    return () => { unsubListings(); unsubPosts(); unsubPlaylist(); };
   }, [user]);
 
-  // Listen to unread notification count
   useEffect(() => {
     if (!user) return;
     const unsub = firestore()
@@ -163,8 +142,8 @@ export default function ProfileScreen() {
   const stats = [
     { label: 'Followers', value: followersCount, onPress: () => fetchUsersList('followers') },
     { label: 'Following', value: followingCount, onPress: () => fetchUsersList('following') },
-    { label: 'Listings', value: myListings.length },
-    { label: 'Posts', value: myPosts.length },
+    { label: 'Listings',  value: myListings.length },
+    { label: 'Posts',     value: myPosts.length },
   ];
 
   const renderContent = () => {
@@ -177,16 +156,10 @@ export default function ProfileScreen() {
         </View>
       );
       return myListings.map(item => (
-        <ProductCard 
-          key={item.id}
-          product={item}
-          isWishlisted={false}
-          onPress={() => router.push(`/product/${item.id}` as any)}
-          onToggleWishlist={() => {}}
-        />
+        <ProductCard key={item.id} product={item} isWishlisted={false}
+          onPress={() => router.push(`/product/${item.id}` as any)} onToggleWishlist={() => {}} />
       ));
     }
-    
     if (viewMode === 'posts') {
       if (loadingPosts) return <ActivityIndicator color="#FF375F" className="mt-8" />;
       if (myPosts.length === 0) return (
@@ -196,15 +169,10 @@ export default function ProfileScreen() {
         </View>
       );
       return myPosts.map(post => (
-        <PostCard 
-          key={post.id}
-          post={post}
-          hasUpvoted={false}
-          onPress={() => router.push(`/post/${post.id}` as any)}
-        />
+        <PostCard key={post.id} post={post} hasUpvoted={false}
+          onPress={() => router.push(`/post/${post.id}` as any)} />
       ));
     }
-    
     if (viewMode === 'playlist') {
       if (loadingPlaylist) return <ActivityIndicator color="#9333EA" className="mt-8" />;
       if (savedPosts.length === 0) return (
@@ -214,37 +182,35 @@ export default function ProfileScreen() {
         </View>
       );
       return savedPosts.map(post => (
-        <PostCard 
-          key={post.id}
-          post={post}
-          hasUpvoted={false}
-          isSaved={true}
-          onPress={() => router.push(`/post/${post.id}` as any)}
-        />
+        <PostCard key={post.id} post={post} hasUpvoted={false} isSaved={true}
+          onPress={() => router.push(`/post/${post.id}` as any)} />
       ));
     }
-    
     return null;
   };
+
+  // ── FIX: derive pill colours from isDark at runtime instead of relying on
+  //    NativeWind's dark: prefix, which can't toggle bg on the same element
+  //    when both light and dark classes share the same CSS property. ──────────
+  const pillTrackBg  = isDark ? '#1C1C1E' : '#F2F2F7';
+  const activePillBg = isDark ? '#2C2C2E' : '#FFFFFF';
+
+  const tabs = [
+    { key: 'listings' as const, label: 'Listings', Icon: Grid,          activeColor: '#14B8A6' },
+    { key: 'posts'    as const, label: 'Posts',    Icon: MessageSquare, activeColor: '#FF375F' },
+    { key: 'playlist' as const, label: 'Playlist', Icon: Bookmark,      activeColor: '#9333EA' },
+  ];
 
   return (
     <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={['top']}>
       {/* Header */}
       <View className="px-5 py-3 border-b border-surface-soft dark:border-surface-dark-secondary flex-row justify-between items-center">
-        <Text variant="h2" className="text-[22px]">
-          Profile
-        </Text>
+        <Text variant="h2" className="text-[22px]">Profile</Text>
         <View className="flex-row items-center gap-1">
-          <TouchableOpacity
-            onPress={() => router.push('/wishlist' as any)}
-            className="p-2.5 rounded-full"
-          >
+          <TouchableOpacity onPress={() => router.push('/wishlist' as any)} className="p-2.5 rounded-full">
             <Heart size={20} color="#FF375F" />
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => router.push('/notifications' as any)}
-            className="p-2.5 rounded-full relative"
-          >
+          <TouchableOpacity onPress={() => router.push('/notifications' as any)} className="p-2.5 rounded-full relative">
             <Bell size={20} color={iconColor} />
             {unreadNotifCount > 0 && (
               <View className="absolute top-1 right-1 bg-brand-pink w-4 h-4 rounded-full items-center justify-center">
@@ -254,16 +220,14 @@ export default function ProfileScreen() {
               </View>
             )}
           </TouchableOpacity>
-          <TouchableOpacity 
-            className="p-2.5 rounded-full" 
-            onPress={() => router.push('/settings' as any)}
-          >
+          <TouchableOpacity className="p-2.5 rounded-full" onPress={() => router.push('/settings' as any)}>
             <Settings size={20} color={iconColor} />
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 100 }}>
+      {/* FIX: bg added so ScrollView never shows white behind content in dark mode */}
+      <ScrollView className="flex-1 bg-surface dark:bg-surface-dark" contentContainerStyle={{ paddingBottom: 100 }}>
         {/* Profile Info */}
         <View className="px-5 py-6 items-center border-b border-surface-soft dark:border-surface-dark-secondary">
           <View className="relative mb-4">
@@ -280,7 +244,6 @@ export default function ProfileScreen() {
               </View>
             )}
           </View>
-          
           <Text variant="h2" className="mb-1 text-[22px]">{userData.name}</Text>
           {userData.username && (
             <Text variant="caption" className="text-content-tertiary mb-1.5">@{userData.username}</Text>
@@ -291,12 +254,10 @@ export default function ProfileScreen() {
               {userData.school}{userData.city ? ` · ${userData.city}` : ''}
             </Text>
           </View>
-          
-          {/* Stats */}
           <View className="flex-row justify-center gap-6 w-full mt-4 mb-2">
-            {stats.map((stat, i) => (
-              <TouchableOpacity 
-                key={stat.label} 
+            {stats.map((stat) => (
+              <TouchableOpacity
+                key={stat.label}
                 onPress={stat.onPress}
                 activeOpacity={stat.onPress ? 0.6 : 1}
                 className="items-center min-w-[70px]"
@@ -308,48 +269,40 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Content Toggle */}
-        <View className="flex-row mx-5 mt-3 bg-surface-soft dark:bg-surface-dark-secondary rounded-xl p-1">
-          <TouchableOpacity 
-            onPress={() => setViewMode('listings')}
-            className={`flex-1 flex-row items-center justify-center py-2.5 rounded-lg gap-2 ${
-              viewMode === 'listings' ? 'bg-surface dark:bg-surface-elevated' : ''
-            }`}
-          >
-            <Grid size={16} color={viewMode === 'listings' ? (isDark ? '#0A84FF' : '#0071E3') : '#8E8E93'} />
-            <Text variant="label" className={`text-[13px] ${viewMode === 'listings' ? 'font-sans-semibold text-brand-teal' : 'text-content-tertiary'}`}>
-              Listings
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={() => setViewMode('posts')}
-            className={`flex-1 flex-row items-center justify-center py-2.5 rounded-lg gap-2 ${
-              viewMode === 'posts' ? 'bg-surface dark:bg-surface-elevated' : ''
-            }`}
-          >
-            <MessageSquare size={16} color={viewMode === 'posts' ? '#FF375F' : '#8E8E93'} />
-            <Text variant="label" className={`text-[13px] ${viewMode === 'posts' ? 'font-sans-semibold text-brand-pink' : 'text-content-tertiary'}`}>
-              Posts
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={() => setViewMode('playlist')}
-            className={`flex-1 flex-row items-center justify-center py-2.5 rounded-lg gap-2 ${
-              viewMode === 'playlist' ? 'bg-surface dark:bg-surface-elevated' : ''
-            }`}
-          >
-            <Bookmark size={16} color={viewMode === 'playlist' ? '#9333EA' : '#8E8E93'} />
-            <Text variant="label" className={`text-[13px] ${viewMode === 'playlist' ? 'font-sans-semibold text-purple-600 dark:text-purple-400' : 'text-content-tertiary'}`}>
-              Playlist
-            </Text>
-          </TouchableOpacity>
+        {/* Content Toggle — pill switcher */}
+        <View
+          className="flex-row mx-5 mt-3 rounded-xl p-1"
+          style={{ backgroundColor: pillTrackBg }}
+        >
+          {tabs.map(({ key, label, Icon, activeColor }) => {
+            const isActive = viewMode === key;
+            return (
+              <TouchableOpacity
+                key={key}
+                onPress={() => setViewMode(key)}
+                className="flex-1 flex-row items-center justify-center py-2.5 rounded-lg gap-2"
+                style={isActive ? { backgroundColor: activePillBg } : undefined}
+              >
+                <Icon size={16} color={isActive ? activeColor : '#8E8E93'} />
+                <Text
+                  variant="label"
+                  className="text-[13px]"
+                  style={isActive
+                    ? { fontWeight: '600', color: activeColor }
+                    : { color: '#8E8E93' }
+                  }
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {/* Content Area */}
         <View className="pt-3">
           {renderContent()}
         </View>
-
       </ScrollView>
 
       {/* Followers/Following Modal */}
@@ -369,7 +322,6 @@ export default function ProfileScreen() {
                 <X size={20} color={iconColor} />
               </TouchableOpacity>
             </View>
-
             {modalLoading ? (
               <ActivityIndicator color="#0071E3" className="mt-8" />
             ) : modalUsers.length === 0 ? (
@@ -383,10 +335,7 @@ export default function ProfileScreen() {
                 {modalUsers.map(u => (
                   <TouchableOpacity
                     key={u.id}
-                    onPress={() => {
-                      setModalType(null);
-                      router.push(`/profile/${u.id}` as any);
-                    }}
+                    onPress={() => { setModalType(null); router.push(`/profile/${u.id}` as any); }}
                     className="flex-row items-center py-3 border-b border-surface-soft dark:border-surface-dark-secondary"
                   >
                     <View className="w-12 h-12 rounded-full bg-surface-soft dark:bg-surface-dark-secondary items-center justify-center mr-3 overflow-hidden">
@@ -412,7 +361,6 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
-
     </SafeAreaView>
   );
 }

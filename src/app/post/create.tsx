@@ -1,8 +1,5 @@
 /**
  * Post Composer Screen
- *
- * Clean, full-screen modal for creating a new post.
- * Matches the web's post creation flow.
  */
 
 import React, { useState } from "react";
@@ -15,6 +12,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -29,6 +27,8 @@ const POST_TYPES = ["general", "confession", "question", "review", "event"] as c
 
 export default function PostCreateScreen() {
   const { user, userData } = useAuth();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -38,6 +38,12 @@ export default function PostCreateScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTypeMenu, setShowTypeMenu] = useState(false);
 
+  // Theme-aware colours used in JS style props (can't use className on TextInput bg)
+  const inputBg        = isDark ? "#2C2C2E" : "#F5F5F7";
+  const inputText      = isDark ? "#F5F5F7" : "#1A1A1C";
+  const placeholderClr = isDark ? "#636366" : "#9CA3AF";
+  const borderClr      = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
+
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -45,7 +51,6 @@ export default function PostCreateScreen() {
       selectionLimit: 4 - images.length,
       quality: 0.8,
     });
-
     if (!result.canceled) {
       setImages((prev) => [...prev, ...result.assets.map((a) => a.uri)]);
     }
@@ -56,18 +61,11 @@ export default function PostCreateScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!content.trim()) {
-      alert("Please write something before posting.");
-      return;
-    }
-    if (!user || !userData) {
-      alert("You must be logged in to post.");
-      return;
-    }
+    if (!content.trim()) { alert("Please write something before posting."); return; }
+    if (!user || !userData) { alert("You must be logged in to post."); return; }
 
     setIsSubmitting(true);
     try {
-      // Upload images
       let imageUrls: string[] = [];
       if (images.length > 0) {
         imageUrls = await Promise.all(
@@ -86,7 +84,7 @@ export default function PostCreateScreen() {
         school: userData.school || "Unknown",
         city: userData.city || null,
         imageUrl: imageUrls[0] || null,
-        imageUrls: imageUrls,
+        imageUrls,
         upvotesCount: 0,
         repliesCount: 0,
         status: "approved",
@@ -95,7 +93,6 @@ export default function PostCreateScreen() {
       };
 
       await firestore().collection("posts").add(payload);
-
       router.back();
     } catch (error) {
       console.error("Error creating post:", error);
@@ -108,38 +105,49 @@ export default function PostCreateScreen() {
   const canSubmit = content.trim().length > 0 && !isSubmitting;
 
   return (
-    <SafeAreaView
-      className="flex-1 bg-surface dark:bg-surface-dark"
-      edges={["top"]}
-    >
+    <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={["top"]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         className="flex-1"
       >
-        {/* Header */}
-        <View className="flex-row items-center justify-between px-5 py-3 border-b border-content-secondary/10">
+        {/* ── Header ── */}
+        <View
+          className="flex-row items-center justify-between px-5 py-3 border-b"
+          style={{ borderBottomColor: borderClr }}
+        >
           <TouchableOpacity
             onPress={() => router.back()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <X size={24} color="#8E8E93" />
+            <X size={24} color={isDark ? "#8E8E93" : "#8E8E93"} />
           </TouchableOpacity>
-          <Text variant="h4">New Post</Text>
+
+          <Text variant="h4" className="dark:text-ink-dark">New Post</Text>
+
+          {/* Post button — explicit colours so it's visible in both modes */}
           <TouchableOpacity
             onPress={handleSubmit}
             disabled={!canSubmit}
-            className={`px-5 py-2 rounded-full ${
-              canSubmit ? "bg-brand-teal" : "bg-content-secondary/20"
-            }`}
+            style={{
+              paddingHorizontal: 20,
+              paddingVertical: 8,
+              borderRadius: 999,
+              backgroundColor: canSubmit
+                ? "#14B8A6"
+                : isDark ? "#2C2C2E" : "#E5E5EA",
+            }}
           >
             {isSubmitting ? (
               <ActivityIndicator color="#FFF" size="small" />
             ) : (
               <Text
                 variant="label"
-                className={`text-[13px] ${
-                  canSubmit ? "text-white" : "text-content-tertiary"
-                }`}
+                style={{
+                  fontSize: 13,
+                  color: canSubmit
+                    ? "#FFFFFF"
+                    : isDark ? "#636366" : "#9CA3AF",
+                }}
               >
                 Post
               </Text>
@@ -152,14 +160,11 @@ export default function PostCreateScreen() {
           contentContainerStyle={{ padding: 20 }}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Author Row */}
+          {/* ── Author Row ── */}
           <View className="flex-row items-center mb-5">
             <View className="w-10 h-10 rounded-full bg-brand-teal/10 items-center justify-center mr-3 overflow-hidden">
               {userData?.profilePicture ? (
-                <Image
-                  source={{ uri: userData.profilePicture }}
-                  className="w-full h-full"
-                />
+                <Image source={{ uri: userData.profilePicture }} className="w-full h-full" />
               ) : (
                 <Text variant="label" className="text-brand-teal">
                   {userData?.name?.[0]?.toUpperCase() || "?"}
@@ -167,44 +172,44 @@ export default function PostCreateScreen() {
               )}
             </View>
             <View className="flex-1">
-              <Text variant="label">{userData?.name || "You"}</Text>
-              <Text variant="caption" className="text-content-secondary">
+              <Text variant="label" className="dark:text-ink-dark">{userData?.name || "You"}</Text>
+              <Text variant="caption" className="text-content-secondary dark:text-ink-dark-faint">
                 {userData?.school || ""}
               </Text>
             </View>
           </View>
 
-          {/* Type Selector */}
+          {/* ── Type Selector ── */}
           <TouchableOpacity
             onPress={() => setShowTypeMenu(!showTypeMenu)}
-            className="flex-row items-center mb-5 self-start px-3 py-1.5 rounded-full border border-content-secondary/20"
+            className="flex-row items-center mb-5 self-start px-3 py-1.5 rounded-full"
+            style={{ borderWidth: 1, borderColor: borderClr }}
           >
-            <Text variant="caption" className="capitalize text-content-secondary mr-1">
+            <Text variant="caption" className="capitalize text-content-secondary dark:text-ink-dark-muted mr-1">
               {type}
             </Text>
-            <ChevronDown size={14} color="#8E8E93" />
+            <ChevronDown size={14} color={isDark ? "#98989D" : "#8E8E93"} />
           </TouchableOpacity>
 
           {showTypeMenu && (
-            <View className="mb-5 bg-surface-soft rounded-xl overflow-hidden border border-content-secondary/10">
+            <View
+              className="mb-5 rounded-xl overflow-hidden"
+              style={{ borderWidth: 1, borderColor: borderClr, backgroundColor: inputBg }}
+            >
               {POST_TYPES.map((t) => (
                 <TouchableOpacity
                   key={t}
                   onPress={() => {
                     setType(t);
                     setShowTypeMenu(false);
-                    if (t === "confession") setIsAnonymous(true);
-                    else setIsAnonymous(false);
+                    setIsAnonymous(t === "confession");
                   }}
-                  className={`px-4 py-3 border-b border-content-secondary/5 ${
-                    type === t ? "bg-brand-teal/5" : ""
-                  }`}
+                  className={`px-4 py-3 ${type === t ? "bg-brand-teal/5" : ""}`}
+                  style={{ borderBottomWidth: 1, borderBottomColor: borderClr }}
                 >
                   <Text
                     variant="label"
-                    className={`capitalize ${
-                      type === t ? "text-brand-teal" : "text-content-secondary"
-                    }`}
+                    className={`capitalize ${type === t ? "text-brand-teal" : "text-content-secondary dark:text-ink-dark-muted"}`}
                   >
                     {t}
                   </Text>
@@ -213,7 +218,7 @@ export default function PostCreateScreen() {
             </View>
           )}
 
-          {/* Anonymous toggle for confessions */}
+          {/* ── Anonymous toggle ── */}
           {type === "confession" && (
             <TouchableOpacity
               onPress={() => setIsAnonymous(!isAnonymous)}
@@ -221,58 +226,60 @@ export default function PostCreateScreen() {
             >
               <View
                 className={`w-5 h-5 rounded border mr-2 items-center justify-center ${
-                  isAnonymous
-                    ? "bg-brand-teal border-brand-teal"
-                    : "border-content-secondary/30"
+                  isAnonymous ? "bg-brand-teal border-brand-teal" : "border-content-secondary/30"
                 }`}
               >
                 {isAnonymous && (
-                  <Text variant="caption" className="text-white text-[10px]">
-                    ✓
-                  </Text>
+                  <Text variant="caption" className="text-white text-[10px]">✓</Text>
                 )}
               </View>
-              <Text variant="label" className="text-content-secondary">
+              <Text variant="label" className="text-content-secondary dark:text-ink-dark-muted">
                 Post anonymously
               </Text>
             </TouchableOpacity>
           )}
 
-          {/* Title (Optional) */}
+          {/* ── Title ── */}
           <TextInput
             value={title}
             onChangeText={setTitle}
             placeholder="Title (optional)"
-            placeholderTextColor="#9CA3AF"
-            className="text-[20px] font-sans-medium text-content mb-3"
-            style={{ lineHeight: 28 }}
+            placeholderTextColor={placeholderClr}
+            style={{
+              fontSize: 20,
+              fontFamily: "Inter_500Medium",
+              color: inputText,
+              lineHeight: 28,
+              marginBottom: 12,
+              backgroundColor: "transparent",
+            }}
           />
 
-          {/* Content */}
+          {/* ── Content ── */}
           <TextInput
             value={content}
             onChangeText={setContent}
             placeholder="What's on your mind?"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={placeholderClr}
             multiline
-            className="text-[17px] font-sans text-content min-h-[200px]"
-            style={{ lineHeight: 26, textAlignVertical: "top" }}
+            style={{
+              fontSize: 17,
+              fontFamily: "Inter_400Regular",
+              color: inputText,
+              lineHeight: 26,
+              textAlignVertical: "top",
+              minHeight: 200,
+              backgroundColor: "transparent",
+            }}
             autoFocus
           />
 
-          {/* Image previews */}
+          {/* ── Image previews ── */}
           {images.length > 0 && (
             <View className="flex-row flex-wrap gap-3 mt-5">
               {images.map((uri, idx) => (
-                <View
-                  key={idx}
-                  className="w-24 h-24 rounded-xl overflow-hidden relative"
-                >
-                  <Image
-                    source={{ uri }}
-                    className="w-full h-full"
-                    resizeMode="cover"
-                  />
+                <View key={idx} className="w-24 h-24 rounded-xl overflow-hidden relative">
+                  <Image source={{ uri }} className="w-full h-full" resizeMode="cover" />
                   <TouchableOpacity
                     onPress={() => removeImage(idx)}
                     className="absolute top-1 right-1 bg-black/50 p-1 rounded-full"
@@ -285,20 +292,16 @@ export default function PostCreateScreen() {
           )}
         </ScrollView>
 
-        {/* Bottom toolbar */}
-        <View className="flex-row items-center px-5 py-3 border-t border-content-secondary/10">
-          <TouchableOpacity
-            onPress={pickImage}
-            disabled={images.length >= 4}
-            className="mr-4"
-          >
-            <ImagePlus
-              size={24}
-              color={images.length >= 4 ? "#D1D5DB" : "#14B8A6"}
-            />
+        {/* ── Bottom toolbar ── */}
+        <View
+          className="flex-row items-center px-5 py-3"
+          style={{ borderTopWidth: 1, borderTopColor: borderClr }}
+        >
+          <TouchableOpacity onPress={pickImage} disabled={images.length >= 4} className="mr-4">
+            <ImagePlus size={24} color={images.length >= 4 ? (isDark ? "#3A3A3C" : "#D1D5DB") : "#14B8A6"} />
           </TouchableOpacity>
           <View className="flex-1" />
-          <Text variant="caption" className="text-content-tertiary">
+          <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint">
             {content.length} / 5000
           </Text>
         </View>

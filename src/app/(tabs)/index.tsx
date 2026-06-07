@@ -10,7 +10,7 @@ import firestore from "@react-native-firebase/firestore";
 import { toggleUpvote, toggleWishlist, toggleSavePost } from "@/lib/social";
 import { FeedSkeleton } from "@/components/ui/SkeletonCard";
 import { Bell, Moon, Sun, Feather } from "lucide-react-native";
-import { useColorScheme } from "nativewind";
+import { useTheme } from "@/providers/ThemeProvider";
 import { useFollowingIds } from "@/lib/follows";
 
 type FeedItem = 
@@ -33,11 +33,8 @@ export default function FeedScreen() {
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
 
   const [contentType, setContentType] = useState<'all' | 'posts' | 'marketplace' | 'for-you'>('all');
-  const { colorScheme, setColorScheme } = useColorScheme();
+  const { colorScheme, isDark, toggleTheme } = useTheme();
   
-  const toggleTheme = () => {
-    setColorScheme(colorScheme === 'dark' ? 'light' : 'dark');
-  };
 
   // Listen to approved posts
   useEffect(() => {
@@ -302,7 +299,6 @@ export default function FeedScreen() {
   };
 
   const isLoading = loadingPosts || loadingProducts;
-  const isDark = colorScheme === 'dark';
   const iconColor = isDark ? '#F5F5F7' : '#1A1A1C';
 
   const tabs: { key: typeof contentType; label: string }[] = [
