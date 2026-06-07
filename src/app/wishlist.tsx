@@ -1,10 +1,5 @@
 /**
  * Wishlist Screen
- *
- * Shows all products the user has wishlisted.
- * Real-time listener, remove items, navigate to product detail.
- *
- * Ported from web: temp_web_repo/src/pages/Dashboard/Wishlist.tsx
  */
 
 import React, { useState, useEffect } from "react";
@@ -15,19 +10,13 @@ import {
   ActivityIndicator,
   Image,
   Alert,
+  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
-import {
-  ChevronLeft,
-  Heart,
-  MapPin,
-  Trash2,
-  Package,
-  Tag,
-} from "lucide-react-native";
+import { ChevronLeft, Heart, MapPin, Trash2, Tag } from "lucide-react-native";
 import firestore from "@react-native-firebase/firestore";
 
 interface WishlistItem {
@@ -50,6 +39,11 @@ interface WishlistItem {
 
 export default function WishlistScreen() {
   const { user } = useAuth();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const iconColor = isDark ? "#F5F5F7" : "#1D1D1F";
+  const borderColor = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
+
   const [items, setItems] = useState<WishlistItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -66,7 +60,6 @@ export default function WishlistScreen() {
             ...d.data(),
           })) as any[];
 
-          // Fetch all product data
           const productPromises = wishlistDocs.map(async (wd) => {
             try {
               const productDoc = await firestore()
@@ -105,7 +98,7 @@ export default function WishlistScreen() {
   const removeFromWishlist = async (wishlistDocId: string) => {
     try {
       await firestore().collection("wishlists").doc(wishlistDocId).delete();
-    } catch (err) {
+    } catch {
       Alert.alert("Error", "Failed to remove item from wishlist.");
     }
   };
@@ -119,11 +112,12 @@ export default function WishlistScreen() {
       <TouchableOpacity
         activeOpacity={0.9}
         onPress={() => router.push(`/product/${product.id}` as any)}
-        className="mx-4 my-2 rounded-2xl overflow-hidden bg-surface-card border border-brand-teal/5 shadow-sm"
+        className="mx-4 my-2 rounded-2xl overflow-hidden bg-surface dark:bg-surface-dark-card"
+        style={{ borderWidth: 1, borderColor }}
       >
         <View className="flex-row">
           {/* Image */}
-          <View className="w-28 h-28 bg-surface-base relative">
+          <View className="w-28 h-28 bg-surface-soft dark:bg-surface-dark-secondary relative">
             <Image
               source={{ uri: product.image || "" }}
               className="w-full h-full"
@@ -131,11 +125,11 @@ export default function WishlistScreen() {
             />
             {isSold && (
               <View className="absolute inset-0 bg-black/40 items-center justify-center">
-                <View className="flex-row items-center bg-content px-3 py-1 rounded-full">
+                <View className="flex-row items-center bg-black/70 px-3 py-1 rounded-full">
                   <Tag size={10} color="#fff" />
                   <Text
                     variant="caption"
-                    className="ml-1 text-[9px] font-bold text-white uppercase tracking-widest"
+                    className="ml-1 text-[9px] font-sans-bold text-white uppercase tracking-widest"
                   >
                     Sold
                   </Text>
@@ -146,7 +140,7 @@ export default function WishlistScreen() {
               <View className="absolute top-2 left-2 bg-amber-500 px-2 py-0.5 rounded-full">
                 <Text
                   variant="caption"
-                  className="text-[8px] font-bold text-white uppercase tracking-widest"
+                  className="text-[8px] font-sans-bold text-white uppercase tracking-widest"
                 >
                   Reserved
                 </Text>
@@ -159,7 +153,7 @@ export default function WishlistScreen() {
             <View>
               <Text
                 variant="label"
-                className="font-bold mb-1"
+                className="font-sans-semibold mb-1 dark:text-ink-dark"
                 numberOfLines={1}
               >
                 {product.title}
@@ -167,28 +161,26 @@ export default function WishlistScreen() {
               <Text variant="h3" className="text-brand-pink mb-1">
                 ₹{product.price}
               </Text>
-              <View className="flex-row items-center gap-1">
-                <Text
-                  variant="caption"
-                  className="text-content-tertiary text-[10px] uppercase tracking-widest font-bold"
-                >
-                  {product.condition} • {product.category}
-                </Text>
-              </View>
+              <Text
+                variant="caption"
+                className="text-content-tertiary dark:text-ink-dark-faint text-[10px] uppercase tracking-widest font-sans-semibold"
+              >
+                {product.condition} • {product.category}
+              </Text>
             </View>
             <View className="flex-row items-center justify-between mt-2">
               <View className="flex-row items-center">
-                <MapPin size={12} color="#8E8E93" />
+                <MapPin size={12} color={isDark ? "#636366" : "#8E8E93"} />
                 <Text
                   variant="caption"
-                  className="ml-1 text-content-tertiary text-[10px]"
+                  className="ml-1 text-content-tertiary dark:text-ink-dark-faint text-[10px]"
                 >
                   {product.city || "Lucknow"}
                 </Text>
               </View>
               <TouchableOpacity
                 onPress={() => removeFromWishlist(item.wishlistDocId)}
-                className="p-2 rounded-lg bg-red-500/5"
+                className="p-2 rounded-lg bg-red-500/10"
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Trash2 size={14} color="#EF4444" />
@@ -206,20 +198,23 @@ export default function WishlistScreen() {
       edges={["top"]}
     >
       {/* Header */}
-      <View className="px-5 py-4 border-b border-brand-teal/5 bg-surface/90 flex-row items-center">
+      <View
+        className="px-5 py-4 flex-row items-center bg-surface dark:bg-surface-dark"
+        style={{ borderBottomWidth: 1, borderBottomColor: borderColor }}
+      >
         <TouchableOpacity
           onPress={() => router.back()}
           className="p-2 -ml-2 mr-2"
         >
-          <ChevronLeft size={24} color="#1D1D1F" />
+          <ChevronLeft size={24} color={iconColor} />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text variant="h2" className="text-2xl font-serif-medium">
+          <Text variant="h2" className="text-2xl dark:text-ink-dark">
             Wishlist
           </Text>
           <Text
             variant="caption"
-            className="text-content-tertiary text-[10px] uppercase tracking-widest font-bold"
+            className="text-content-tertiary dark:text-ink-dark-faint text-[10px] uppercase tracking-widest font-sans-semibold"
           >
             {items.length} saved item{items.length !== 1 ? "s" : ""}
           </Text>
@@ -228,23 +223,22 @@ export default function WishlistScreen() {
 
       {/* Content */}
       {loading ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#F77CA2" />
+        <View className="flex-1 items-center justify-center bg-surface dark:bg-surface-dark">
+          <ActivityIndicator color="#F43F5E" />
         </View>
       ) : items.length === 0 ? (
-        <View className="flex-1 items-center justify-center px-6">
-          <View className="w-16 h-16 bg-brand-pink/5 rounded-2xl items-center justify-center mb-4">
-            <Heart size={32} color="#F77CA2" />
+        <View className="flex-1 items-center justify-center px-6 bg-surface dark:bg-surface-dark">
+          <View className="w-16 h-16 bg-brand-pink/10 rounded-2xl items-center justify-center mb-4">
+            <Heart size={32} color="#F43F5E" />
           </View>
-          <Text variant="h3" className="mb-2 font-serif italic">
+          <Text variant="h3" className="mb-2 dark:text-ink-dark">
             Nothing Saved Yet
           </Text>
           <Text
             variant="caption"
-            className="text-content-secondary text-center mb-6"
+            className="text-content-secondary dark:text-ink-dark-muted text-center mb-6"
           >
-            Browse the marketplace and tap the heart icon to save items
-            you love.
+            Browse the marketplace and tap the heart icon to save items you love.
           </Text>
           <TouchableOpacity
             onPress={() => router.back()}
@@ -252,7 +246,7 @@ export default function WishlistScreen() {
           >
             <Text
               variant="label"
-              className="text-white font-bold uppercase tracking-widest text-[10px]"
+              className="text-white font-sans-semibold uppercase tracking-widest text-[10px]"
             >
               Explore Marketplace
             </Text>
@@ -263,6 +257,7 @@ export default function WishlistScreen() {
           data={items}
           keyExtractor={(item) => item.wishlistDocId}
           renderItem={renderItem}
+          className="bg-surface dark:bg-surface-dark"
           contentContainerStyle={{ paddingVertical: 8, paddingBottom: 100 }}
         />
       )}
