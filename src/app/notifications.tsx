@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -63,6 +64,8 @@ const ICON_MAP: Record<string, { icon: any; color: string }> = {
 
 export default function NotificationsScreen() {
   const { user } = useAuth();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
@@ -180,7 +183,7 @@ export default function NotificationsScreen() {
       >
         <View
           className={`w-10 h-10 rounded-xl items-center justify-center ${
-            !item.read ? "bg-brand-teal/10" : "bg-surface-soft"
+            !item.read ? "bg-brand-teal/10" : "bg-surface-soft dark:bg-surface-dark-elevated"
           }`}
         >
           <IconComponent size={20} color={iconInfo.color} />
@@ -236,21 +239,21 @@ export default function NotificationsScreen() {
       edges={["top"]}
     >
       {/* Header */}
-      <View className="px-5 py-4 border-b border-brand-teal/5 bg-surface/90 flex-row items-center justify-between">
+      <View className="px-5 py-4 border-b border-brand-teal/5 bg-surface/90 dark:bg-surface-dark/90 flex-row items-center justify-between">
         <View className="flex-row items-center">
           <TouchableOpacity
             onPress={() => router.back()}
             className="p-2 -ml-2 mr-2"
           >
-            <ChevronLeft size={24} color="#1D1D1F" />
+            <ChevronLeft size={24} color={isDark ? "#F5F5F7" : "#1D1D1F"} />
           </TouchableOpacity>
           <View>
-            <Text variant="h2" className="text-2xl font-serif-medium">
+            <Text variant="h2" className="text-2xl font-sans-semibold dark:text-ink-dark">
               Notifications
             </Text>
             <Text
               variant="caption"
-              className="text-content-tertiary text-[10px] uppercase tracking-widest font-bold"
+              className="text-content-tertiary dark:text-ink-dark-faint text-[10px] uppercase tracking-widest font-bold"
             >
               {unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}
             </Text>
@@ -280,16 +283,16 @@ export default function NotificationsScreen() {
             onPress={() => setActiveFilter(tab.key)}
             className={`flex-row items-center gap-1.5 px-3 py-2 rounded-full ${
               activeFilter === tab.key
-                ? "bg-content"
-                : "bg-surface-soft"
+                ? "bg-content dark:bg-ink-dark"
+                : "bg-surface-soft dark:bg-surface-dark-elevated"
             }`}
           >
             <Text
               variant="caption"
               className={`text-[10px] font-bold uppercase tracking-widest ${
                 activeFilter === tab.key
-                  ? "text-white"
-                  : "text-content-tertiary"
+                  ? "text-white dark:text-surface-dark"
+                  : "text-content-tertiary dark:text-ink-dark-faint"
               }`}
             >
               {tab.label}

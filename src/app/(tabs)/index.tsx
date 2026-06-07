@@ -164,7 +164,6 @@ export default function FeedScreen() {
 
   // Feed scoring and mixing
   const feedItems = useMemo(() => {
-    // 1. Combine posts and products into a single pool
     const allItems = [
       ...rawPosts.map(p => ({ ...p, _type: 'post' as const })),
       ...products.map(p => ({ ...p, _type: 'product' as const }))
@@ -173,97 +172,63 @@ export default function FeedScreen() {
     if (contentType === 'for-you' || contentType === 'all') {
       const now = Date.now();
       
-      // 2. Score each item
       const scoredItems = allItems.map(item => {
         let score = 0;
         
-        // Base score depends on type
         if (item._type === 'post') {
           score = (item.upvotesCount || 0) * 2 + (item.repliesCount || 0) * 3;
-          
-          // Boosts for relevance
-          if (followingIds.has(item.authorId)) score += 20; // Following boost
-          if (userData?.school && item.school === userData.school) score += 15; // School boost
-          if (userData?.city && item.city === userData.city) score += 10; // City boost
-          
-          // Confessions get a small bump in evening/night hours (local time)
+          if (followingIds.has(item.authorId)) score += 20;
+          if (userData?.school && item.school === userData.school) score += 15;
+          if (userData?.city && item.city === userData.city) score += 10;
           const hour = new Date().getHours();
-          if (item.type === 'confession' && (hour >= 18 || hour < 4)) {
-            score += 10;
-          }
+          if (item.type === 'confession' && (hour >= 18 || hour < 4)) score += 10;
         } else {
-          // Products base score
-          score = 15; // Start with decent baseline
+          score = 15;
           if (userData?.school && item.sellerSchool === userData.school) score += 15;
           if (userData?.city && item.city === userData.city) score += 10;
-          if (item.status === 'sold') score -= 50; // Heavily penalize sold items
+          if (item.status === 'sold') score -= 50;
         }
 
-        // Time decay (gentle decay over 48h)
         const itemTime = item.createdAt?.toMillis?.() || Date.now();
         const hoursAgo = Math.max(0.5, (now - itemTime) / (1000 * 60 * 60));
-        
-        // Velocity (engagement / time)
         const velocity = item._type === 'post' 
           ? ((item.upvotesCount || 0) + (item.repliesCount || 0) * 1.5) / hoursAgo
           : 0;
-        
-        score += Math.min(velocity * 2, 25); // Cap velocity bonus at +25
-        
-        // Apply time decay multiplier
+        score += Math.min(velocity * 2, 25);
         const timeMultiplier = 1 / Math.pow(1 + hoursAgo * 0.05, 1.2);
         const finalScore = score * timeMultiplier;
 
         return { item, finalScore, hoursAgo };
       });
 
-      // 3. Sort by raw score
       scoredItems.sort((a, b) => b.finalScore - a.finalScore);
 
-      // 4. Enforce diversity (max 2 posts per author in top 20, interleave products)
       const finalFeed: any[] = [];
       const authorCounts = new Map<string, number>();
       const unusedProducts: any[] = [];
 
       for (const { item, hoursAgo } of scoredItems) {
         if (item._type === 'product') {
-          // Keep products in a separate queue to interleave them
-          if (item.status !== 'sold' || finalFeed.length > 10) {
-            unusedProducts.push(item);
-          }
+          if (item.status !== 'sold' || finalFeed.length > 10) unusedProducts.push(item);
           continue;
         }
-
-        // Check author diversity
         const authorId = item.authorId;
         const count = authorCounts.get(authorId) || 0;
-        
-        // Skip if this author dominates the top of the feed, unless it's very recent (breaking news/viral)
-        if (count >= 2 && finalFeed.length < 20 && hoursAgo > 2) {
-          continue;
-        }
-
+        if (count >= 2 && finalFeed.length < 20 && hoursAgo > 2) continue;
         authorCounts.set(authorId, count + 1);
         finalFeed.push(item);
-
-        // Interleave a product every 4 posts
         if (finalFeed.length % 4 === 0 && unusedProducts.length > 0) {
           finalFeed.push(unusedProducts.shift());
         }
       }
-
-      // Add remaining products to the end
       finalFeed.push(...unusedProducts);
       
-      // Map back to FeedItem interface
       return finalFeed.map(item => ({
         type: item._type,
         data: item,
         timestamp: item.createdAt?.toMillis?.() || 0
       })) as FeedItem[];
     } 
-    
-    // 'posts' tab: chronological sorted posts only
     else if (contentType === 'posts') {
       return [...rawPosts].sort((a, b) => {
         const timeA = a.createdAt?.toMillis?.() || 0;
@@ -275,14 +240,10 @@ export default function FeedScreen() {
         timestamp: p.createdAt?.toMillis?.() || 0
       })) as FeedItem[];
     } 
-    
-    // 'market' tab: chronological sorted products only
     else {
       return [...products].sort((a, b) => {
-        // Push sold items to bottom
         if (a.status === 'sold' && b.status !== 'sold') return 1;
         if (a.status !== 'sold' && b.status === 'sold') return -1;
-        
         const timeA = a.createdAt?.toMillis?.() || 0;
         const timeB = b.createdAt?.toMillis?.() || 0;
         return timeB - timeA;
@@ -300,39 +261,18 @@ export default function FeedScreen() {
   }, []);
 
   const handleUpvote = async (post: Post) => {
-    if (!user) {
-      Alert.alert('Sign In Required', 'You need to sign in to upvote posts.');
-      return;
-    }
-    try {
-      await toggleUpvote(post.id, user.uid);
-    } catch (err) {
-      console.error('Upvote error:', err);
-    }
+    if (!user) { Alert.alert('Sign In Required', 'You need to sign in to upvote posts.'); return; }
+    try { await toggleUpvote(post.id, user.uid); } catch (err) { console.error('Upvote error:', err); }
   };
 
   const handleToggleWishlist = async (product: Product) => {
-    if (!user) {
-      Alert.alert('Sign In Required', 'You need to sign in to save items.');
-      return;
-    }
-    try {
-      await toggleWishlist(product.id, user.uid);
-    } catch (err) {
-      console.error('Wishlist error:', err);
-    }
+    if (!user) { Alert.alert('Sign In Required', 'You need to sign in to save items.'); return; }
+    try { await toggleWishlist(product.id, user.uid); } catch (err) { console.error('Wishlist error:', err); }
   };
 
   const handleToggleSavePost = async (post: Post) => {
-    if (!user) {
-      Alert.alert('Sign In Required', 'You need to sign in to save posts.');
-      return;
-    }
-    try {
-      await toggleSavePost(post.id, user.uid);
-    } catch (err) {
-      console.error('Save post error:', err);
-    }
+    if (!user) { Alert.alert('Sign In Required', 'You need to sign in to save posts.'); return; }
+    try { await toggleSavePost(post.id, user.uid); } catch (err) { console.error('Save post error:', err); }
   };
 
   const renderItem = ({ item }: { item: FeedItem }) => {
@@ -404,7 +344,7 @@ export default function FeedScreen() {
           </View>
         </View>
 
-        {/* Segment Control Tabs */}
+        {/* Segment Control Tabs — FIXED for dark mode */}
         <View className="flex-row bg-surface-soft dark:bg-surface-dark-secondary rounded-xl p-1 mb-3">
           {tabs.map(tab => (
             <TouchableOpacity
@@ -412,15 +352,15 @@ export default function FeedScreen() {
               onPress={() => setContentType(tab.key)}
               className={`flex-1 py-2 rounded-lg items-center ${
                 contentType === tab.key 
-                  ? 'bg-surface dark:bg-surface-elevated' 
-                  : ''
+                  ? 'bg-white dark:bg-surface-dark-elevated' 
+                  : 'bg-transparent'
               }`}
               style={
                 contentType === tab.key 
                   ? {
                       shadowColor: '#000',
                       shadowOffset: { width: 0, height: 1 },
-                      shadowOpacity: 0.1,
+                      shadowOpacity: isDark ? 0.4 : 0.1,
                       shadowRadius: 2,
                       elevation: 2,
                     }
@@ -431,8 +371,8 @@ export default function FeedScreen() {
                 variant="label" 
                 className={`text-[13px] ${
                   contentType === tab.key 
-                    ? 'font-sans-semibold text-content dark:text-content-dark' 
-                    : 'font-sans-medium text-content-tertiary'
+                    ? 'font-sans-semibold text-ink dark:text-ink-dark' 
+                    : 'font-sans-medium text-content-tertiary dark:text-ink-dark-faint'
                 }`}
               >
                 {tab.label}
@@ -470,7 +410,7 @@ export default function FeedScreen() {
                   className="flex-1 h-10 px-4 rounded-full bg-surface-soft dark:bg-surface-dark-secondary justify-center"
                   activeOpacity={0.7}
                 >
-                  <Text variant="bodySmall" className="text-content-tertiary">
+                  <Text variant="bodySmall" className="text-content-tertiary dark:text-ink-dark-faint">
                     What's on your mind?
                   </Text>
                 </TouchableOpacity>
@@ -480,12 +420,12 @@ export default function FeedScreen() {
           contentContainerStyle={{ paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0071E3" />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#14B8A6" />
           }
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center pt-20 px-6">
-              <Text variant="h3" className="text-content-secondary mb-2">Nothing here yet</Text>
-              <Text variant="caption" className="text-center text-content-tertiary">
+              <Text variant="h3" className="text-content-secondary dark:text-ink-dark-muted mb-2">Nothing here yet</Text>
+              <Text variant="caption" className="text-center text-content-tertiary dark:text-ink-dark-faint">
                 Check back later or create a new post.
               </Text>
             </View>
