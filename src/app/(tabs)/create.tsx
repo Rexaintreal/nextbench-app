@@ -1,13 +1,14 @@
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
-import firestore from "@react-native-firebase/firestore";
-import storage from "@react-native-firebase/storage";
+import { uploadPostImageMobile } from "@/lib/storage";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { Upload, X, Check } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Image, ScrollView, TextInput, TouchableOpacity, View, useColorScheme } from "react-native";
+import { getFirestore, collection, addDoc, serverTimestamp } from '@react-native-firebase/firestore';
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AppAlert } from '@/components/ui/AppAlert';
 
 const CATEGORIES = ['Books', 'Electronics', 'Stationery', 'Sports', 'Clothing', 'Other'];
 const CONDITIONS = ['Like New', 'Good', 'Fair', 'Used'];
@@ -42,27 +43,14 @@ export default function CreateScreen() {
     setImages(prev => prev.filter((_, i) => i !== index));
   };
 
-  const uploadImage = async (uri: string, uid: string) => {
-    const filename = uri.substring(uri.lastIndexOf('/') + 1);
-    const extension = filename.split('.').pop();
-    const name = filename.split('.').slice(0, -1).join('.');
-    const timestamp = Date.now();
-    const newFilename = `${name}-${timestamp}.${extension}`;
-    const storagePath = `products/${uid}/${newFilename}`;
-
-    const reference = storage().ref(storagePath);
-    await reference.putFile(uri);
-    return await reference.getDownloadURL();
-  };
-
   const handleSubmit = async () => {
     if (!user || !userData) {
-      alert("You must be logged in to create a listing");
+      AppAlert.alert("Error", "You must be logged in to create a listing");
       return;
     }
 
     if (!title.trim() || !price || images.length === 0) {
-      alert("Please fill in title, price, and add at least one image");
+      AppAlert.alert("Missing Info", "Please fill in title, price, and add at least one image");
       return;
     }
 
@@ -70,7 +58,7 @@ export default function CreateScreen() {
     try {
       // Upload images
       const imageUrls = await Promise.all(
-        images.map(uri => uploadImage(uri, user.uid))
+        images.map(uri => uploadPostImageMobile(uri))
       );
 
       const payload = {
@@ -88,13 +76,14 @@ export default function CreateScreen() {
         sellerName: userData.name || 'Unknown',
         sellerSchool: userData.school || 'Unknown',
         status: 'pending',
-        createdAt: firestore.FieldValue.serverTimestamp(),
-        updatedAt: firestore.FieldValue.serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       };
 
-      await firestore().collection('products').add(payload);
+      const db = getFirestore();
+      await addDoc(collection(db, 'products'), payload);
 
-      alert("Listing submitted successfully!");
+      AppAlert.alert("Success", "Your listing has been submitted for review!");
       setTitle("");
       setPrice("");
       setDescription("");
@@ -102,7 +91,7 @@ export default function CreateScreen() {
       router.push("/(tabs)"); // Go back to Home
     } catch (error) {
       console.error("Error creating listing", error);
-      alert("Failed to create listing");
+      AppAlert.alert("Error", "Failed to create listing. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

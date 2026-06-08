@@ -20,10 +20,18 @@ import * as ImagePicker from "expo-image-picker";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import { X, ImagePlus, ChevronDown } from "lucide-react-native";
-import firestore from "@react-native-firebase/firestore";
-import { uploadToCloudinary } from "@/lib/storage";
+import { getFirestore, collection, addDoc, serverTimestamp } from '@react-native-firebase/firestore';
+import { uploadPostImageMobile } from "@/lib/storage";
+import { AppAlert } from '@/components/ui/AppAlert';
 
-const POST_TYPES = ["general", "confession", "question", "review", "event"] as const;
+
+const POST_TYPES = [
+  { value: "info",       label: "School Info" },
+  { value: "notes",      label: "Notes" },
+  { value: "event",      label: "Interschool Event" },
+  { value: "confession", label: "Anonymous Post" },
+  { value: "others",     label: "Others" },
+] as const;
 
 export default function PostCreateScreen() {
   const { user, userData } = useAuth();
@@ -32,7 +40,7 @@ export default function PostCreateScreen() {
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [type, setType] = useState<string>("general");
+  const [type, setType] = useState<string>("others");
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [images, setImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -61,20 +69,20 @@ export default function PostCreateScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!content.trim()) { alert("Please write something before posting."); return; }
-    if (!user || !userData) { alert("You must be logged in to post."); return; }
+    if (!content.trim()) { AppAlert.alert("Please write something before posting."); return; }
+    if (!user || !userData) { AppAlert.alert("You must be logged in to post."); return; }
 
     setIsSubmitting(true);
     try {
       let imageUrls: string[] = [];
       if (images.length > 0) {
         imageUrls = await Promise.all(
-          images.map((uri) => uploadToCloudinary(uri, "nextbench/posts"))
+        images.map((uri) => uploadPostImageMobile(uri))
         );
       }
 
       const payload: any = {
-        title: title.trim() || null,
+        title: title.trim() || "Untitled",
         content: content.trim(),
         type,
         isAnonymous: type === "confession" ? isAnonymous : false,
@@ -88,15 +96,15 @@ export default function PostCreateScreen() {
         upvotesCount: 0,
         repliesCount: 0,
         status: "approved",
-        createdAt: firestore.FieldValue.serverTimestamp(),
-        updatedAt: firestore.FieldValue.serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       };
 
-      await firestore().collection("posts").add(payload);
+      await addDoc(collection(getFirestore(), "posts"), payload);
       router.back();
     } catch (error) {
       console.error("Error creating post:", error);
-      alert("Failed to create post. Please try again.");
+      AppAlert.alert("Failed to create post. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -185,9 +193,9 @@ export default function PostCreateScreen() {
             className="flex-row items-center mb-5 self-start px-3 py-1.5 rounded-full"
             style={{ borderWidth: 1, borderColor: borderClr }}
           >
-            <Text variant="caption" className="capitalize text-content-secondary dark:text-ink-dark-muted mr-1">
-              {type}
-            </Text>
+          <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted mr-1">
+            {POST_TYPES.find(t => t.value === type)?.label || type}
+          </Text>
             <ChevronDown size={14} color={isDark ? "#98989D" : "#8E8E93"} />
           </TouchableOpacity>
 
@@ -196,25 +204,25 @@ export default function PostCreateScreen() {
               className="mb-5 rounded-xl overflow-hidden"
               style={{ borderWidth: 1, borderColor: borderClr, backgroundColor: inputBg }}
             >
-              {POST_TYPES.map((t) => (
-                <TouchableOpacity
-                  key={t}
-                  onPress={() => {
-                    setType(t);
-                    setShowTypeMenu(false);
-                    setIsAnonymous(t === "confession");
-                  }}
-                  className={`px-4 py-3 ${type === t ? "bg-brand-teal/5" : ""}`}
-                  style={{ borderBottomWidth: 1, borderBottomColor: borderClr }}
+            {POST_TYPES.map((t) => (
+              <TouchableOpacity
+                key={t.value}
+                onPress={() => {
+                  setType(t.value);
+                  setShowTypeMenu(false);
+                  setIsAnonymous(t.value === "confession");
+                }}
+                className={`px-4 py-3 ${type === t.value ? "bg-brand-teal/5" : ""}`}
+                style={{ borderBottomWidth: 1, borderBottomColor: borderClr }}
+              >
+                <Text
+                  variant="label"
+                  className={`${type === t.value ? "text-brand-teal" : "text-content-secondary dark:text-ink-dark-muted"}`}
                 >
-                  <Text
-                    variant="label"
-                    className={`capitalize ${type === t ? "text-brand-teal" : "text-content-secondary dark:text-ink-dark-muted"}`}
-                  >
-                    {t}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                  {t.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
             </View>
           )}
 
