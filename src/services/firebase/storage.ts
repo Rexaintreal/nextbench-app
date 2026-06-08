@@ -1,73 +1,43 @@
-/**
- * Firebase Storage Service
- *
- * Handles file uploads and URL retrieval.
- * Used primarily for user avatars and post images.
- */
+const CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME;
+const UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
-import storage from "@react-native-firebase/storage";
+export async function uploadChatImageMobile(localUri: string, roomId: string): Promise<string> {
+  if (!CLOUD_NAME || !UPLOAD_PRESET) {
+    throw new Error('Cloudinary environment variables are missing.');
+  }
 
-/**
- * Upload a file to Firebase Storage.
- *
- * @param localUri - Local file URI (from image picker, camera, etc.)
- * @param storagePath - Path in Firebase Storage (e.g., "posts/abc123/image.jpg")
- * @returns The download URL of the uploaded file
- */
-export async function uploadFile(
-  localUri: string,
-  storagePath: string
-): Promise<string> {
-  const reference = storage().ref(storagePath);
-  await reference.putFile(localUri);
-  return reference.getDownloadURL();
-}
+  const filename = localUri.split('/').pop() || 'image.jpg';
+  const match = /\.(\w+)$/.exec(filename);
+  const type = match ? `image/${match[1]}` : 'image/jpeg';
 
-/**
- * Upload multiple files in parallel.
- *
- * @param files - Array of { localUri, storagePath }
- * @returns Array of download URLs in the same order
- */
-export async function uploadFiles(
-  files: Array<{ localUri: string; storagePath: string }>
-): Promise<string[]> {
-  const promises = files.map(({ localUri, storagePath }) =>
-    uploadFile(localUri, storagePath)
-  );
-  return Promise.all(promises);
-}
+  const formData = new FormData();
+  formData.append('file', { uri: localUri, name: filename, type } as any);
+  formData.append('upload_preset', UPLOAD_PRESET);
+  formData.append('folder', `nextbench/chats/${roomId}`);
 
-/**
- * Delete a file from Firebase Storage.
- */
-export async function deleteFile(storagePath: string): Promise<void> {
-  await storage().ref(storagePath).delete();
-}
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`);
+    
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          resolve(data.secure_url);
+        } catch {
+          reject(new Error('Failed to parse Cloudinary response'));
+        }
+      } else {
+        try {
+          const err = JSON.parse(xhr.responseText);
+          reject(new Error(err.error?.message || 'Upload failed'));
+        } catch {
+          reject(new Error(`Upload failed with status ${xhr.status}`));
+        }
+      }
+    };
 
-/**
- * Get the download URL for an existing file.
- */
-export async function getDownloadURL(storagePath: string): Promise<string> {
-  return storage().ref(storagePath).getDownloadURL();
-}
-
-/**
- * Generate a unique storage path for a post image.
- */
-export function generatePostImagePath(
-  userId: string,
-  postId: string,
-  index: number
-): string {
-  const timestamp = Date.now();
-  return `posts/${userId}/${postId}/${timestamp}_${index}.jpg`;
-}
-
-/**
- * Generate a storage path for a user's avatar.
- */
-export function generateAvatarPath(userId: string): string {
-  const timestamp = Date.now();
-  return `avatars/${userId}/${timestamp}.jpg`;
+    xhr.onerror = () => reject(new Error('Network error during upload'));
+    xhr.send(formData);
+  });
 }

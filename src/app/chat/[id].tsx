@@ -7,8 +7,8 @@ import { useAuth } from "@/providers/AuthProvider";
 import { ArrowLeft, Send, Image as ImageIcon, User, X, Reply, MoreVertical } from "lucide-react-native";
 import { blockUser } from "@/lib/blocks";
 import firestore from "@react-native-firebase/firestore";
+import { uploadChatImageMobile } from '@/services/firebase/storage';
 import * as ImagePicker from "expo-image-picker";
-import storage from "@react-native-firebase/storage";
 import * as Clipboard from 'expo-clipboard';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -383,32 +383,18 @@ export default function ChatRoomScreen() {
     ]);
   };
 
+
+
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.8,
     });
+
     if (!result.canceled && result.assets[0].uri) {
       setIsUploading(true);
       try {
-        const asset = result.assets[0];
-        const uri = asset.uri;
-        const ext = (asset.mimeType?.split('/')[1]) || uri.split('.').pop() || 'jpg';
-        const filename = `${Date.now()}.${ext}`;
-        const ref = storage().ref(`chats/${roomId}/${filename}`);
-
-        if (Platform.OS === 'android' && uri.startsWith('content://')) {
-          // Android content:// URIs can't be used with putFile directly.
-          // Fetch as blob and upload with put() instead.
-          const response = await fetch(uri);
-          const blob = await response.blob();
-          await ref.put(blob);
-        } else {
-          // iOS file:// URIs work fine with putFile
-          await ref.putFile(uri);
-        }
-
-        const url = await ref.getDownloadURL();
+        const url = await uploadChatImageMobile(result.assets[0].uri, roomId!);
         await handleSend(undefined, url);
       } catch (err) {
         console.error("Failed to upload image", err);
