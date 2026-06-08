@@ -24,7 +24,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       foregroundImage: "./assets/images/android-icon-foreground.png",
       backgroundImage: "./assets/images/android-icon-background.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
-      backgroundColor: "#0c8eeb",
+      backgroundColor: "#1C1C1E",
     },
     googleServicesFile: "./google-services.json",
     package: "in.nextbench.app",
@@ -52,7 +52,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       "expo-splash-screen",
       {
-        backgroundColor: "#0c8eeb",
+        backgroundColor: "#1C1C1E",
         image: "./assets/images/splash-icon.png",
         imageWidth: 200,
       },
