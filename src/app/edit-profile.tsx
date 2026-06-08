@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   Image,
   TextInput,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -26,6 +25,24 @@ import { ArrowLeft, Camera } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import firestore from "@react-native-firebase/firestore";
 import { uploadToCloudinary } from "@/lib/storage";
+import { AppAlert } from "@/components/ui/AppAlert";
+
+// Explicit theme tokens — NativeWind's dark: variant is unreliable
+// on TextInput for text/background colors, so we drive them via style.
+const THEME = {
+  light: {
+    inputBg: "#F3F4F6",       // surface-soft
+    inputText: "#1D1D1F",
+    inputBorder: "rgba(0,0,0,0.08)",
+    placeholder: "#9CA3AF",
+  },
+  dark: {
+    inputBg: "#1C1C1E",       // surface-dark-secondary
+    inputText: "#F5F5F7",
+    inputBorder: "rgba(255,255,255,0.08)",
+    placeholder: "#636366",
+  },
+} as const;
 
 function Field({
   label,
@@ -35,6 +52,7 @@ function Field({
   multiline = false,
   maxLength,
   editable = true,
+  isDark,
 }: {
   label: string;
   value: string;
@@ -43,7 +61,10 @@ function Field({
   multiline?: boolean;
   maxLength?: number;
   editable?: boolean;
+  isDark: boolean;
 }) {
+  const t = isDark ? THEME.dark : THEME.light;
+
   return (
     <View className="mb-6">
       <Text
@@ -56,17 +77,30 @@ function Field({
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor={t.placeholder}
         editable={editable}
         multiline={multiline}
         maxLength={maxLength}
-        className={`px-4 py-3 rounded-xl border border-content-secondary/15 text-[16px] text-content bg-surface-soft dark:bg-surface-dark-secondary ${
-          multiline ? "min-h-[100px]" : ""
-        } ${!editable ? "opacity-50" : ""}`}
-        style={multiline ? { textAlignVertical: "top" } : undefined}
+        style={[
+          {
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            borderRadius: 12,
+            borderWidth: 1,
+            fontSize: 16,
+            color: t.inputText,
+            backgroundColor: t.inputBg,
+            borderColor: t.inputBorder,
+            opacity: editable ? 1 : 0.5,
+          },
+          multiline && { minHeight: 100, textAlignVertical: "top" },
+        ]}
       />
-      {maxLength && (
-        <Text variant="caption" className="text-content-tertiary mt-1 text-right">
+      {maxLength != null && (
+        <Text
+          variant="caption"
+          className="text-content-tertiary mt-1 text-right"
+        >
           {value.length}/{maxLength}
         </Text>
       )}
@@ -77,19 +111,30 @@ function Field({
 export default function EditProfileScreen() {
   const { user, userData } = useAuth();
   const { colorScheme } = useColorScheme();
-  const iconColor = colorScheme === "dark" ? "#FFFFFF" : "#1D1D1F";
+  const isDark = colorScheme === "dark";
+  const iconColor = isDark ? "#FFFFFF" : "#1D1D1F";
 
-  const [name, setName] = useState(userData?.name || "");
-  const [username, setUsername] = useState(userData?.username || "");
-  const [about, setAbout] = useState(userData?.about || "");
-  const [city, setCity] = useState(userData?.city || "");
+  const [name, setName] = useState(userData?.name ?? "");
+  const [username, setUsername] = useState(userData?.username ?? "");
+  const [about, setAbout] = useState(userData?.about ?? "");
+  const [city, setCity] = useState(userData?.city ?? "");
   const [profileImage, setProfileImage] = useState<string | null>(
-    userData?.profilePicture || null
+    userData?.profilePicture ?? null
   );
   const [newImageUri, setNewImageUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const pickProfileImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      AppAlert.alert(
+        "Permission required",
+        "Please allow access to your photo library in Settings.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -105,16 +150,16 @@ export default function EditProfileScreen() {
 
   const handleSave = async () => {
     if (!user) return;
+
     if (!name.trim()) {
-      Alert.alert("Error", "Name cannot be empty.");
+      AppAlert.alert("Missing name", "Name cannot be empty.", [{ text: "OK" }]);
       return;
     }
 
     setSaving(true);
     try {
-      let profilePictureUrl = userData?.profilePicture || null;
+      let profilePictureUrl = userData?.profilePicture ?? null;
 
-      // Upload new profile picture if changed
       if (newImageUri) {
         profilePictureUrl = await uploadToCloudinary(
           newImageUri,
@@ -122,30 +167,29 @@ export default function EditProfileScreen() {
         );
       }
 
-      await firestore()
-        .collection("users")
-        .doc(user.uid)
-        .update({
-          name: name.trim(),
-          username: username.trim() || null,
-          about: about.trim() || null,
-          city: city.trim() || null,
-          profilePicture: profilePictureUrl,
-          updatedAt: firestore.FieldValue.serverTimestamp(),
-        });
+      await firestore().collection("users").doc(user.uid).update({
+        name: name.trim(),
+        username: username.trim() || null,
+        about: about.trim() || null,
+        city: city.trim() || null,
+        profilePicture: profilePictureUrl,
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+      });
 
-      Alert.alert("Saved", "Your profile has been updated.", [
+      AppAlert.alert("Saved", "Your profile has been updated.", [
         { text: "OK", onPress: () => router.back() },
       ]);
     } catch (err) {
       console.error("Save profile error:", err);
-      Alert.alert("Error", "Failed to save. Please try again.");
+      AppAlert.alert("Error", "Failed to save. Please try again.", [
+        { text: "OK" },
+      ]);
     } finally {
       setSaving(false);
     }
   };
 
-  const avatarText = name?.[0]?.toUpperCase() || "?";
+  const avatarText = name?.[0]?.toUpperCase() ?? "?";
 
   return (
     <SafeAreaView
@@ -164,7 +208,9 @@ export default function EditProfileScreen() {
           >
             <ArrowLeft size={24} color={iconColor} />
           </TouchableOpacity>
+
           <Text variant="h4">Edit Profile</Text>
+
           <TouchableOpacity
             onPress={handleSave}
             disabled={saving}
@@ -210,29 +256,30 @@ export default function EditProfileScreen() {
                 <Camera size={14} color="#FFFFFF" />
               </View>
             </TouchableOpacity>
-            <Text
-              variant="caption"
-              className="text-content-secondary mt-3"
-            >
+            <Text variant="caption" className="text-content-secondary mt-3">
               Tap to change photo
             </Text>
           </View>
 
-          {/* Fields */}
+          {/* Editable fields */}
           <Field
             label="Name"
             value={name}
             onChangeText={setName}
             placeholder="Your name"
             maxLength={50}
+            isDark={isDark}
           />
 
           <Field
             label="Username"
             value={username}
-            onChangeText={(t) => setUsername(t.toLowerCase().replace(/[^a-z0-9._]/g, ""))}
+            onChangeText={(t) =>
+              setUsername(t.toLowerCase().replace(/[^a-z0-9._]/g, ""))
+            }
             placeholder="your_username"
             maxLength={30}
+            isDark={isDark}
           />
 
           <Field
@@ -242,6 +289,7 @@ export default function EditProfileScreen() {
             placeholder="Tell us about yourself..."
             multiline
             maxLength={300}
+            isDark={isDark}
           />
 
           <Field
@@ -250,21 +298,24 @@ export default function EditProfileScreen() {
             onChangeText={setCity}
             placeholder="Your city"
             maxLength={50}
+            isDark={isDark}
           />
 
           {/* Read-only fields */}
           <Field
             label="Email"
-            value={userData?.email || ""}
+            value={userData?.email ?? ""}
             onChangeText={() => {}}
             editable={false}
+            isDark={isDark}
           />
 
           <Field
             label="School"
-            value={userData?.school || ""}
+            value={userData?.school ?? ""}
             onChangeText={() => {}}
             editable={false}
+            isDark={isDark}
           />
         </ScrollView>
       </KeyboardAvoidingView>

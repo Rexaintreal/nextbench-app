@@ -92,7 +92,6 @@ export function Button({
       `}
       style={[
         isDisabled ? { opacity: 0.5 } : undefined,
-        style
       ]}
       disabled={isDisabled}
       {...props}
