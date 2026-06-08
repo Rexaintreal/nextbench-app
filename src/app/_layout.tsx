@@ -29,6 +29,7 @@ import {
 import { QueryProvider } from "@/providers/QueryProvider";
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
 import { ThemeProvider, useTheme } from "@/providers/ThemeProvider";
+import { AlertProvider } from '@/components/ui/AppAlert';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -129,9 +130,11 @@ export default function RootLayout() {
   return (
     <QueryProvider>
       <ThemeProvider>
-        <AuthProvider>
-          <RootLayoutNav />
-        </AuthProvider>
+        <AlertProvider>
+          <AuthProvider>
+            <RootLayoutNav />
+          </AuthProvider>
+        </AlertProvider>
       </ThemeProvider>
     </QueryProvider>
   );

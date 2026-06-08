@@ -12,11 +12,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
+import { AppAlert } from '@/components/ui/AppAlert';
 import { useAuth } from "@/providers/AuthProvider";
 import { useTheme } from "@/providers/ThemeProvider";
 import firestore from "@react-native-firebase/firestore";
@@ -182,7 +182,7 @@ export default function PostDetailScreen() {
   };
 
   const handleDeleteComment = (replyId: string) => {
-    Alert.alert("Delete Comment", "Are you sure?", [
+    AppAlert.alert("Delete Comment", "Are you sure?", [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => {
         try {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { View, ScrollView, ActivityIndicator, Image, TouchableOpacity, Alert, useColorScheme } from "react-native";
+import { View, ScrollView, ActivityIndicator, Image, TouchableOpacity, useColorScheme } from "react-native";
+import { AppAlert } from '@/components/ui/AppAlert';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
@@ -48,20 +49,20 @@ export default function ProductDetailScreen() {
   }, [user, id]);
 
   const handleToggleWishlist = async () => {
-    if (!user || !id) { Alert.alert("Sign In Required", "You need to sign in to save items."); return; }
+    if (!user || !id) { AppAlert.alert("Sign In Required", "You need to sign in to save items."); return; }
     try { await toggleWishlist(id, user.uid); }
     catch (err) { console.error("Wishlist toggle error:", err); }
   };
 
   const handleContactSeller = async () => {
     if (!user || !product) return;
-    if (user.uid === product.sellerId) { Alert.alert("Your Listing", "You cannot message yourself."); return; }
+    if (user.uid === product.sellerId) { AppAlert.alert("Your Listing", "You cannot message yourself."); return; }
     try {
       const { roomId } = await getOrCreateDMRoom(user.uid, product.sellerId);
       router.push(`/chat/${roomId}` as any);
     } catch (err) {
       console.error("Contact seller error:", err);
-      Alert.alert("Error", "Failed to start conversation. Please try again.");
+      AppAlert.alert("Error", "Failed to start conversation. Please try again.");
     }
   };
 

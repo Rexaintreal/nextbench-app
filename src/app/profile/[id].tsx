@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
-  Alert,
   ActionSheetIOS,
   Platform,
 } from "react-native";
@@ -18,6 +17,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTheme } from "@/providers/ThemeProvider";
+import { AppAlert } from '@/components/ui/AppAlert';
 import {
   ChevronLeft, ShieldCheck, MapPin, Grid,
   MessageSquare, MoreHorizontal, UserPlus,
@@ -88,7 +88,7 @@ export default function OtherProfileScreen() {
   const handleToggleFollow = async () => {
     if (!user || !profileId) return;
     if (!myData?.verified) {
-      Alert.alert("Verification Required", "You must be verified to follow users.");
+      AppAlert.alert("Verification Required", "You must be verified to follow users.");
       return;
     }
     try {
@@ -102,12 +102,12 @@ export default function OtherProfileScreen() {
     try {
       const { roomId } = await getOrCreateDMRoom(user.uid, profileId, profileData);
       router.push(`/chat/${roomId}` as any);
-    } catch { Alert.alert("Error", "Failed to start conversation."); }
+    } catch { AppAlert.alert("Error", "Failed to start conversation."); }
   };
 
   const handleBlock = async () => {
     if (!user || !profileId) return;
-    Alert.alert(
+    AppAlert.alert(
       isBlocked ? "Unblock User" : "Block User",
       isBlocked
         ? `Unblock ${profileData?.name}?`
@@ -122,7 +122,7 @@ export default function OtherProfileScreen() {
                 await blockUser(user.uid, profileId);
                 if (isFollowing) await unfollowUser(user.uid, profileId);
               }
-            } catch { Alert.alert("Error", "Failed to update block status."); }
+            } catch { AppAlert.alert("Error", "Failed to update block status."); }
           },
         },
       ]
@@ -136,7 +136,7 @@ export default function OtherProfileScreen() {
         (i) => { if (i === 1) handleBlock(); if (i === 2) setShowReportModal(true); }
       );
     } else {
-      Alert.alert("Actions", undefined, [
+      AppAlert.alert("Actions", undefined, [
         { text: "Cancel", style: "cancel" },
         { text: isBlocked ? "Unblock User" : "Block User", style: "destructive", onPress: handleBlock },
         { text: "Report User", onPress: () => setShowReportModal(true) },

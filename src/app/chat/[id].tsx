@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, FlatList, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Image, ImageBackground, useColorScheme, Alert, Modal, ScrollView } from "react-native";
+import { View, FlatList, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Image, ImageBackground, useColorScheme, Modal, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
@@ -13,6 +13,7 @@ import * as Clipboard from 'expo-clipboard';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { createNotification } from "@/lib/notifications";
+import { AppAlert } from '@/components/ui/AppAlert';
 
 interface Message {
   id: string;
@@ -195,7 +196,7 @@ export default function ChatRoomScreen() {
         .collection('chatRooms').doc(roomId).collection('messages')
         .where('senderId', '==', user.uid).limit(1).get();
       if (!myMsgsSnap.empty) {
-        Alert.alert('Request Pending', 'You\'ve already sent a message. Wait for them to accept your chat request.');
+        AppAlert.alert('Request Pending', 'You\'ve already sent a message. Wait for them to accept your chat request.');
         return;
       }
     }
@@ -294,7 +295,7 @@ export default function ChatRoomScreen() {
         lastSenderId: user.uid,
         updatedAt: firestore.FieldValue.serverTimestamp(),
       });
-      Alert.alert("Success", "Message forwarded");
+      AppAlert.alert("Success", "Message forwarded");
     } catch (e) { console.error("Forward failed", e); }
     finally { setShowForwardModal(false); setForwardingMessage(null); }
   };
@@ -313,7 +314,7 @@ export default function ChatRoomScreen() {
     if (isMe) {
       actions.push({
         text: "Delete for everyone", style: "destructive",
-        onPress: () => Alert.alert("Delete for everyone", "This cannot be undone.", [
+        onPress: () => AppAlert.alert("Delete for everyone", "This cannot be undone.", [
           { text: "Cancel", style: "cancel" },
           { text: "Delete", style: "destructive", onPress: () => handleDeleteForEveryone(msg.id) }
         ])
@@ -321,11 +322,11 @@ export default function ChatRoomScreen() {
     }
     actions.push({ text: "Cancel", style: "cancel" });
 
-    Alert.alert("Message Options", undefined, actions);
+    AppAlert.alert("Message Options", undefined, actions);
   };
 
   const handleClearChat = () => {
-    Alert.alert("Clear Chat", "This will clear all messages for you only.", [
+    AppAlert.alert("Clear Chat", "This will clear all messages for you only.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Clear", style: "destructive", onPress: async () => {
@@ -335,8 +336,8 @@ export default function ChatRoomScreen() {
             const batch = firestore().batch();
             msgsSnap.docs.forEach(doc => batch.update(doc.ref, { deletedFor: firestore.FieldValue.arrayUnion(user.uid) }));
             await batch.commit();
-            Alert.alert("Done", "Chat cleared for you.");
-          } catch (err) { Alert.alert("Error", "Failed to clear chat."); }
+            AppAlert.alert("Done", "Chat cleared for you.");
+          } catch (err) { AppAlert.alert("Error", "Failed to clear chat."); }
         },
       },
     ]);
@@ -348,26 +349,26 @@ export default function ChatRoomScreen() {
       if (isMuted) {
         await firestore().collection('chatRooms').doc(roomId).update({ mutedBy: firestore.FieldValue.arrayRemove(user.uid) });
         setIsMuted(false);
-        Alert.alert("Unmuted", "You will now receive notifications from this chat.");
+        AppAlert.alert("Unmuted", "You will now receive notifications from this chat.");
       } else {
         await firestore().collection('chatRooms').doc(roomId).update({ mutedBy: firestore.FieldValue.arrayUnion(user.uid) });
         setIsMuted(true);
-        Alert.alert("Muted", "You won't receive notifications from this chat.");
+        AppAlert.alert("Muted", "You won't receive notifications from this chat.");
       }
     } catch (err) { console.error("Mute toggle failed", err); }
   };
 
   const handleBlockUser = () => {
     if (!user || !otherUser?.id) return;
-    Alert.alert("Block User", `Block ${otherUser.name || 'this user'}?`, [
+    AppAlert.alert("Block User", `Block ${otherUser.name || 'this user'}?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Block", style: "destructive", onPress: async () => {
           try {
             await blockUser(user.uid, otherUser.id);
-            Alert.alert("Blocked", `${otherUser.name || 'User'} has been blocked.`);
+            AppAlert.alert("Blocked", `${otherUser.name || 'User'} has been blocked.`);
             router.back();
-          } catch (err) { Alert.alert("Error", "Failed to block user."); }
+          } catch (err) { AppAlert.alert("Error", "Failed to block user."); }
         },
       },
     ]);
@@ -375,7 +376,7 @@ export default function ChatRoomScreen() {
 
   const showChatOptions = () => {
     // Cross-platform: Alert.alert works on both iOS and Android
-    Alert.alert("Chat Options", undefined, [
+    AppAlert.alert("Chat Options", undefined, [
       { text: "Clear Chat", onPress: handleClearChat },
       { text: isMuted ? "Unmute Notifications" : "Mute Notifications", onPress: handleToggleMute },
       { text: "Block User", style: "destructive", onPress: handleBlockUser },
@@ -398,7 +399,7 @@ export default function ChatRoomScreen() {
         await handleSend(undefined, url);
       } catch (err) {
         console.error("Failed to upload image", err);
-        Alert.alert("Upload Failed", "Could not upload image. Please try again.");
+        AppAlert.alert("Upload Failed", "Could not upload image. Please try again.");
       } finally {
         setIsUploading(false);
       }
@@ -489,7 +490,7 @@ export default function ChatRoomScreen() {
                 <View className="flex-row justify-center gap-3">
                   <TouchableOpacity
                     onPress={() => {
-                      Alert.alert('Decline', 'Decline this chat request?', [
+                      AppAlert.alert('Decline', 'Decline this chat request?', [
                         { text: 'Cancel', style: 'cancel' },
                         {
                           text: 'Decline', style: 'destructive', onPress: async () => {
