@@ -1,10 +1,5 @@
 /**
  * Notifications Screen
- *
- * Stack screen showing user notifications with category filters,
- * mark-as-read, mark-all-read, and delete functionality.
- *
- * Ported from web: temp_web_repo/src/pages/Dashboard/Notifications.tsx
  */
 
 import React, { useState, useEffect } from "react";
@@ -13,7 +8,6 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -21,17 +15,14 @@ import { router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import {
-  Bell,
-  CheckCheck,
-  ShieldCheck,
-  Package,
-  MessageSquare,
-  Star,
-  Trash2,
-  Crown,
-  ChevronLeft,
+  Bell, CheckCheck, ShieldCheck, Package,
+  MessageSquare, Star, Trash2, Crown, ChevronLeft,
 } from "lucide-react-native";
-import firestore from "@react-native-firebase/firestore";
+import {
+  getFirestore, collection, query, where, orderBy,
+  onSnapshot, doc, updateDoc, deleteDoc, writeBatch,
+} from "@react-native-firebase/firestore";
+import { AppAlert } from "@/components/ui/AppAlert";
 
 interface Notification {
   id: string;
@@ -45,21 +36,20 @@ interface Notification {
 
 type FilterKey = "all" | "deals" | "social" | "system";
 
-const isDeals = (type: string) =>
-  ["listing_approved", "listing_rejected", "item_reserved", "item_sold", "new_review"].includes(type);
+const isDeals  = (type: string) => ["listing_approved","listing_rejected","item_reserved","item_sold","new_review"].includes(type);
 const isSocial = (type: string) => ["new_message"].includes(type);
-const isSystem = (type: string) => ["user_approved", "admin_promoted"].includes(type);
+const isSystem = (type: string) => ["user_approved","admin_promoted"].includes(type);
 
 const ICON_MAP: Record<string, { icon: any; color: string }> = {
-  user_approved: { icon: ShieldCheck, color: "#0071E3" },
-  listing_approved: { icon: Package, color: "#34C759" },
-  listing_rejected: { icon: Package, color: "#EF4444" },
-  new_message: { icon: MessageSquare, color: "#F77CA2" },
-  new_post: { icon: Bell, color: "#0071E3" },
-  item_reserved: { icon: Package, color: "#F59E0B" },
-  item_sold: { icon: Package, color: "#0071E3" },
-  new_review: { icon: Star, color: "#EAB308" },
-  admin_promoted: { icon: Crown, color: "#F77CA2" },
+  user_approved:    { icon: ShieldCheck,   color: "#0071E3" },
+  listing_approved: { icon: Package,       color: "#34C759" },
+  listing_rejected: { icon: Package,       color: "#EF4444" },
+  new_message:      { icon: MessageSquare, color: "#F77CA2" },
+  new_post:         { icon: Bell,          color: "#0071E3" },
+  item_reserved:    { icon: Package,       color: "#F59E0B" },
+  item_sold:        { icon: Package,       color: "#0071E3" },
+  new_review:       { icon: Star,          color: "#EAB308" },
+  admin_promoted:   { icon: Crown,         color: "#F77CA2" },
 };
 
 export default function NotificationsScreen() {
@@ -73,31 +63,33 @@ export default function NotificationsScreen() {
   useEffect(() => {
     if (!user) return;
 
-    const unsubscribe = firestore()
-      .collection("notifications")
-      .where("userId", "==", user.uid)
-      .orderBy("createdAt", "desc")
-      .onSnapshot(
-        (snapshot) => {
-          const notifs: Notification[] = [];
-          snapshot.forEach((d) => {
-            notifs.push({ id: d.id, ...d.data() } as Notification);
-          });
-          setNotifications(notifs);
-          setLoading(false);
-        },
-        (error) => {
-          console.error("Notifications listener error:", error);
-          setLoading(false);
-        }
-      );
+    const db = getFirestore();
+    const q = query(
+      collection(db, "notifications"),
+      where("userId", "==", user.uid),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const notifs: Notification[] = [];
+        snapshot.forEach((d) => notifs.push({ id: d.id, ...d.data() } as Notification));
+        setNotifications(notifs);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Notifications listener error:", error);
+        setLoading(false);
+      }
+    );
 
     return () => unsubscribe();
   }, [user]);
 
   const filteredNotifications = notifications.filter((n) => {
-    if (activeFilter === "all") return true;
-    if (activeFilter === "deals") return isDeals(n.type);
+    if (activeFilter === "all")    return true;
+    if (activeFilter === "deals")  return isDeals(n.type);
     if (activeFilter === "social") return isSocial(n.type);
     if (activeFilter === "system") return isSystem(n.type);
     return true;
@@ -106,15 +98,15 @@ export default function NotificationsScreen() {
   const unreadCount = filteredNotifications.filter((n) => !n.read).length;
 
   const unreadCounts = {
-    all: notifications.filter((n) => !n.read).length,
-    deals: notifications.filter((n) => !n.read && isDeals(n.type)).length,
+    all:    notifications.filter((n) => !n.read).length,
+    deals:  notifications.filter((n) => !n.read && isDeals(n.type)).length,
     social: notifications.filter((n) => !n.read && isSocial(n.type)).length,
     system: notifications.filter((n) => !n.read && isSystem(n.type)).length,
   };
 
   const markAsRead = async (notifId: string) => {
     try {
-      await firestore().collection("notifications").doc(notifId).update({ read: true });
+      await updateDoc(doc(getFirestore(), "notifications", notifId), { read: true });
     } catch {
       // silent
     }
@@ -123,48 +115,40 @@ export default function NotificationsScreen() {
   const markAllRead = async () => {
     const unread = filteredNotifications.filter((n) => !n.read);
     if (unread.length === 0) return;
-
     try {
-      const batch = firestore().batch();
-      unread.forEach((n) => {
-        batch.update(firestore().collection("notifications").doc(n.id), {
-          read: true,
-        });
-      });
+      const db = getFirestore();
+      const batch = writeBatch(db);
+      unread.forEach((n) => batch.update(doc(db, "notifications", n.id), { read: true }));
       await batch.commit();
     } catch {
-      Alert.alert("Error", "Failed to update notifications.");
+      AppAlert.alert("Error", "Failed to update notifications.");
     }
   };
 
   const deleteNotification = async (notifId: string) => {
     try {
-      await firestore().collection("notifications").doc(notifId).delete();
+      await deleteDoc(doc(getFirestore(), "notifications", notifId));
     } catch {
-      Alert.alert("Error", "Failed to delete notification.");
+      AppAlert.alert("Error", "Failed to delete notification.");
     }
   };
 
   const handleClick = (notif: Notification) => {
     if (!notif.read) markAsRead(notif.id);
-    // Navigate if there's a link
     if (notif.link) {
       if (notif.link.startsWith("/chat/")) {
-        const chatId = notif.link.replace("/chat/", "");
-        router.push(`/chat/${chatId}` as any);
+        router.push(`/chat/${notif.link.replace("/chat/", "")}` as any);
       } else if (notif.link.startsWith("/product/")) {
-        const productId = notif.link.replace("/product/", "");
-        router.push(`/product/${productId}` as any);
+        router.push(`/product/${notif.link.replace("/product/", "")}` as any);
       } else if (notif.link.startsWith("/profile/")) {
-        const profileId = notif.link.replace("/profile/", "");
-        router.push(`/profile/${profileId}` as any);
+        router.push(`/profile/${notif.link.replace("/profile/", "")}` as any);
       }
     }
   };
 
   const filterTabs: { key: FilterKey; label: string; count: number }[] = [
-    { key: "all", label: "All", count: unreadCounts.all },
-    { key: "deals", label: "Deals", count: unreadCounts.deals },
+    { key: "all",    label: "All",    count: unreadCounts.all },
+    { key: "deals",  label: "Deals",  count: unreadCounts.deals },
     { key: "social", label: "Social", count: unreadCounts.social },
     { key: "system", label: "System", count: unreadCounts.system },
   ];
@@ -210,14 +194,10 @@ export default function NotificationsScreen() {
             className="text-content-tertiary text-[10px] uppercase tracking-widest font-bold mt-1"
           >
             {item.createdAt?.toDate?.()
-              ? item.createdAt
-                  .toDate()
-                  .toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
+              ? item.createdAt.toDate().toLocaleDateString(undefined, {
+                  month: "short", day: "numeric",
+                  hour: "2-digit", minute: "2-digit",
+                })
               : "Just now"}
           </Text>
         </View>
@@ -234,27 +214,18 @@ export default function NotificationsScreen() {
   };
 
   return (
-    <SafeAreaView
-      className="flex-1 bg-surface dark:bg-surface-dark"
-      edges={["top"]}
-    >
+    <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={["top"]}>
       {/* Header */}
       <View className="px-5 py-4 border-b border-brand-teal/5 bg-surface/90 dark:bg-surface-dark/90 flex-row items-center justify-between">
         <View className="flex-row items-center">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className="p-2 -ml-2 mr-2"
-          >
+          <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2 mr-2">
             <ChevronLeft size={24} color={isDark ? "#F5F5F7" : "#1D1D1F"} />
           </TouchableOpacity>
           <View>
             <Text variant="h2" className="text-2xl font-sans-semibold dark:text-ink-dark">
               Notifications
             </Text>
-            <Text
-              variant="caption"
-              className="text-content-tertiary dark:text-ink-dark-faint text-[10px] uppercase tracking-widest font-bold"
-            >
+            <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint text-[10px] uppercase tracking-widest font-bold">
               {unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}
             </Text>
           </View>
@@ -265,10 +236,7 @@ export default function NotificationsScreen() {
             className="flex-row items-center gap-1 px-3 py-2 bg-brand-teal/10 rounded-full"
           >
             <CheckCheck size={14} color="#0071E3" />
-            <Text
-              variant="caption"
-              className="text-brand-teal text-[10px] font-bold uppercase tracking-widest"
-            >
+            <Text variant="caption" className="text-brand-teal text-[10px] font-bold uppercase tracking-widest">
               Read all
             </Text>
           </TouchableOpacity>
@@ -300,17 +268,13 @@ export default function NotificationsScreen() {
             {tab.count > 0 && (
               <View
                 className={`px-1.5 py-0.5 rounded-full min-w-[16px] items-center ${
-                  activeFilter === tab.key
-                    ? "bg-brand-pink"
-                    : "bg-brand-pink/10"
+                  activeFilter === tab.key ? "bg-brand-pink" : "bg-brand-pink/10"
                 }`}
               >
                 <Text
                   variant="caption"
                   className={`text-[9px] font-bold ${
-                    activeFilter === tab.key
-                      ? "text-white"
-                      : "text-brand-pink"
+                    activeFilter === tab.key ? "text-white" : "text-brand-pink"
                   }`}
                 >
                   {tab.count}
@@ -324,22 +288,16 @@ export default function NotificationsScreen() {
       {/* Content */}
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#0071E3" />
+          <ActivityIndicator color="#14B8A6" />
         </View>
       ) : filteredNotifications.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
           <View className="w-16 h-16 bg-brand-teal/5 rounded-2xl items-center justify-center mb-4">
-            <Bell size={32} color="#0071E3" />
+            <Bell size={32} color="#14B8A6" />
           </View>
-          <Text variant="h3" className="mb-2 font-serif italic">
-            All Clear
-          </Text>
-          <Text
-            variant="caption"
-            className="text-content-secondary text-center"
-          >
-            You'll be notified when something important happens —
-            approvals, messages, and more.
+          <Text variant="h3" className="mb-2 dark:text-ink-dark">All Clear</Text>
+          <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted text-center">
+            You'll be notified when something important happens — approvals, messages, and more.
           </Text>
         </View>
       ) : (

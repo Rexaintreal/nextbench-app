@@ -17,7 +17,7 @@ import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
-import firestore from "@react-native-firebase/firestore";
+import { getFirestore, doc, updateDoc } from "@react-native-firebase/firestore";
 import {
   useFonts,
   Inter_400Regular,
@@ -90,7 +90,7 @@ function RootLayoutNav() {
         const tokenData = await Notifications.getExpoPushTokenAsync({
           projectId,
         });
-        await firestore().collection("users").doc(user.uid).update({
+        await updateDoc(doc(getFirestore(), "users", user.uid), {
           pushToken: tokenData.data,
         });
       } catch (err) {

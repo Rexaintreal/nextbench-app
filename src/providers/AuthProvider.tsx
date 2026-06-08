@@ -21,6 +21,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { boolean } from "zod";
 
 export interface UserData {
   id: string;
@@ -39,6 +40,9 @@ export interface UserData {
   city?: string;
   createdAt: any;
   updatedAt: any;
+  chatPrivacy?: {
+    followersOnly?: boolean;
+  };
 }
 
 interface AuthContextValue {

@@ -11,7 +11,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -29,7 +28,8 @@ import {
   HelpCircle,
 } from "lucide-react-native";
 import auth from "@react-native-firebase/auth";
-import firestore from "@react-native-firebase/firestore";
+import { getFirestore, doc, updateDoc } from "@react-native-firebase/firestore";
+import { AppAlert } from "@/components/ui/AppAlert";
 
 function SettingsRow({
   icon,
@@ -91,17 +91,19 @@ export default function SettingsScreen() {
   const toggleFollowersOnlyDM = async (val: boolean) => {
     if (!user) return;
     try {
-      await firestore().collection("users").doc(user.uid).set({
-        chatPrivacy: { followersOnly: val }
-      }, { merge: true });
+    await updateDoc(
+      doc(getFirestore(), "users", user.uid),
+      { chatPrivacy: { followersOnly: val } }
+    );
     } catch (err) {
       console.error("Failed to update chat privacy", err);
-      Alert.alert("Error", "Failed to update privacy settings.");
+      AppAlert.alert("Error", "Failed to update privacy settings.");
     }
   };
 
+
   const handleLogout = () => {
-    Alert.alert("Log Out", "Are you sure you want to log out?", [
+    AppAlert.alert("Log Out", "Are you sure you want to log out?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Log Out",
@@ -231,8 +233,7 @@ export default function SettingsScreen() {
           <SettingsRow
             icon={<HelpCircle size={20} color={iconColor} />}
             label="Help & Support"
-            onPress={() => Alert.alert('Support', 'Reach us at support@nextbench.in')}
-          />
+            onPress={() => AppAlert.alert("Support", "Reach us at support@nextbench.in")}/>
         </View>
 
         {/* Logout */}
