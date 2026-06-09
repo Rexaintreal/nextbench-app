@@ -3,6 +3,7 @@ import { View, TouchableOpacity, Image } from 'react-native';
 import { router } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { Heart, MessageCircle, Share2, Bookmark, Flame, ThumbsDown, Flag } from 'lucide-react-native';
+import PollDisplay from '@/components/ui/PollDisplay';
 
 export interface Post {
   id: string;
@@ -21,6 +22,11 @@ export interface Post {
   feedScore?: number;
   city?: string;
   createdAt: any;
+  poll?: {
+    choices: string[];
+    expiresAt: any;
+    votes: Record<string, number>;
+  };
 }
 
 export interface PostCardProps {
@@ -152,6 +158,11 @@ export default function PostCard({ post, hasUpvoted, isSaved, onPress, onUpvote,
             </View>
           )}
         </View>
+      )}
+
+      {/* Poll */}
+      {post.poll && (
+        <PollDisplay postId={post.id} poll={post.poll} compact />
       )}
 
       {/* Actions */}

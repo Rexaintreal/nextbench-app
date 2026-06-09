@@ -3,15 +3,31 @@ import { useAuth } from "@/providers/AuthProvider";
 import { uploadPostImageMobile } from "@/lib/storage";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import { Upload, X, Check } from "lucide-react-native";
+import { Upload, X, Check, Plus, BarChart3, Trash2 } from "lucide-react-native";
 import { useState } from "react";
-import { ActivityIndicator, Image, ScrollView, TextInput, TouchableOpacity, View, useColorScheme } from "react-native";
-import { getFirestore, collection, addDoc, serverTimestamp } from '@react-native-firebase/firestore';
+import {
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  View,
+  useColorScheme,
+  Switch,
+} from "react-native";
+import { getFirestore, collection, addDoc, serverTimestamp, Timestamp } from '@react-native-firebase/firestore';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppAlert } from '@/components/ui/AppAlert';
 
 const CATEGORIES = ['Books', 'Electronics', 'Stationery', 'Sports', 'Clothing', 'Other'];
 const CONDITIONS = ['Like New', 'Good', 'Fair', 'Used'];
+
+// How long a poll stays open (options in hours)
+const POLL_DURATIONS = [
+  { label: '1 day', hours: 24 },
+  { label: '3 days', hours: 72 },
+  { label: '1 week', hours: 168 },
+];
 
 export default function CreateScreen() {
   const { user, userData } = useAuth();
@@ -25,7 +41,30 @@ export default function CreateScreen() {
   const [category, setCategory] = useState("Books");
   const [condition, setCondition] = useState("Like New");
   const [images, setImages] = useState<string[]>([]);
-  //easter egg - so u actually see code rather than just vibecoding huhu
+
+  // ── Poll state ─────────────────────────────────────
+  const [pollEnabled, setPollEnabled] = useState(false);
+  const [pollChoices, setPollChoices] = useState<string[]>(['', '']);
+  const [pollDurationIdx, setPollDurationIdx] = useState(0); // index into POLL_DURATIONS
+
+  const addPollChoice = () => {
+    if (pollChoices.length >= 5) return;
+    setPollChoices(prev => [...prev, '']);
+  };
+
+  const removePollChoice = (idx: number) => {
+    if (pollChoices.length <= 2) return;
+    setPollChoices(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const updatePollChoice = (idx: number, value: string) => {
+    setPollChoices(prev => prev.map((c, i) => (i === idx ? value : c)));
+  };
+
+  const isPollValid = () =>
+    pollChoices.filter(c => c.trim().length > 0).length >= 2;
+
+  // ── Image picking ──────────────────────────────────
   const pickImages = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -33,7 +72,6 @@ export default function CreateScreen() {
       selectionLimit: 5 - images.length,
       quality: 0.8,
     });
-
     if (!result.canceled) {
       setImages(prev => [...prev, ...result.assets.map(a => a.uri)]);
     }
@@ -43,6 +81,7 @@ export default function CreateScreen() {
     setImages(prev => prev.filter((_, i) => i !== index));
   };
 
+  // ── Submit ─────────────────────────────────────────
   const handleSubmit = async () => {
     if (!user || !userData) {
       AppAlert.alert("Error", "You must be logged in to create a listing");
@@ -54,19 +93,35 @@ export default function CreateScreen() {
       return;
     }
 
+    if (pollEnabled && !isPollValid()) {
+      AppAlert.alert("Poll incomplete", "Please fill in at least 2 poll choices");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      // Upload images
       const imageUrls = await Promise.all(
         images.map(uri => uploadPostImageMobile(uri))
       );
 
-      const payload = {
+      // Build poll object if enabled
+      let pollPayload: object | null = null;
+      if (pollEnabled) {
+        const filledChoices = pollChoices.filter(c => c.trim().length > 0);
+        const durationMs = POLL_DURATIONS[pollDurationIdx].hours * 60 * 60 * 1000;
+        pollPayload = {
+          choices: filledChoices,
+          votes: {},
+          expiresAt: Timestamp.fromMillis(Date.now() + durationMs),
+        };
+      }
+
+      const payload: Record<string, any> = {
         title: title.trim(),
         price: Number(price),
         condition,
         category,
-        image: imageUrls[0], // primary
+        image: imageUrls[0],
         images: imageUrls,
         description,
         meetupAvailable: true,
@@ -80,6 +135,8 @@ export default function CreateScreen() {
         updatedAt: serverTimestamp(),
       };
 
+      if (pollPayload) payload.poll = pollPayload;
+
       const db = getFirestore();
       await addDoc(collection(db, 'products'), payload);
 
@@ -88,7 +145,9 @@ export default function CreateScreen() {
       setPrice("");
       setDescription("");
       setImages([]);
-      router.push("/(tabs)"); // Go back to Home
+      setPollEnabled(false);
+      setPollChoices(['', '']);
+      router.push("/(tabs)");
     } catch (error) {
       console.error("Error creating listing", error);
       AppAlert.alert("Error", "Failed to create listing. Please try again.");
@@ -96,6 +155,13 @@ export default function CreateScreen() {
       setIsSubmitting(false);
     }
   };
+
+  // ── Theme helpers ──────────────────────────────────
+  const teal = isDark ? '#2DD4BF' : '#14B8A6';
+  const inputBg = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+  const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+  const labelColor = isDark ? '#A1A1AA' : '#71717A';
+  const textColor = isDark ? '#E4E4E7' : '#111827';
 
   return (
     <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={['top']}>
@@ -107,7 +173,7 @@ export default function CreateScreen() {
 
       <ScrollView className="flex-1 px-5 pt-4" contentContainerStyle={{ paddingBottom: 120 }}>
 
-        {/* Images */}
+        {/* ── Images ─────────────────────────────────── */}
         <View className="mb-5">
           <Text variant="caption" className="text-content-tertiary font-sans-semibold uppercase tracking-widest text-[11px] mb-2">
             Photos ({images.length}/5)
@@ -137,7 +203,7 @@ export default function CreateScreen() {
           </ScrollView>
         </View>
 
-        {/* Title */}
+        {/* ── Title ──────────────────────────────────── */}
         <View className="mb-4">
           <Text variant="caption" className="text-content-tertiary font-sans-semibold uppercase tracking-widest text-[11px] mb-1.5">
             Title
@@ -151,7 +217,7 @@ export default function CreateScreen() {
           />
         </View>
 
-        {/* Price */}
+        {/* ── Price ──────────────────────────────────── */}
         <View className="mb-4">
           <Text variant="caption" className="text-content-tertiary font-sans-semibold uppercase tracking-widest text-[11px] mb-1.5">
             Price (₹)
@@ -166,7 +232,7 @@ export default function CreateScreen() {
           />
         </View>
 
-        {/* Category Pills */}
+        {/* ── Category ───────────────────────────────── */}
         <View className="mb-4">
           <Text variant="caption" className="text-content-tertiary font-sans-semibold uppercase tracking-widest text-[11px] mb-2">
             Category
@@ -177,8 +243,8 @@ export default function CreateScreen() {
                 key={cat}
                 onPress={() => setCategory(cat)}
                 className={`px-3.5 py-2 rounded-lg flex-row items-center ${
-                  category === cat 
-                    ? 'bg-brand-teal' 
+                  category === cat
+                    ? 'bg-brand-teal'
                     : 'bg-surface-soft dark:bg-surface-dark-secondary'
                 }`}
               >
@@ -197,7 +263,7 @@ export default function CreateScreen() {
           </View>
         </View>
 
-        {/* Condition Pills */}
+        {/* ── Condition ──────────────────────────────── */}
         <View className="mb-4">
           <Text variant="caption" className="text-content-tertiary font-sans-semibold uppercase tracking-widest text-[11px] mb-2">
             Condition
@@ -208,8 +274,8 @@ export default function CreateScreen() {
                 key={cond}
                 onPress={() => setCondition(cond)}
                 className={`px-3.5 py-2 rounded-lg ${
-                  condition === cond 
-                    ? 'bg-brand-teal' 
+                  condition === cond
+                    ? 'bg-brand-teal'
                     : 'bg-surface-soft dark:bg-surface-dark-secondary'
                 }`}
               >
@@ -223,7 +289,7 @@ export default function CreateScreen() {
           </View>
         </View>
 
-        {/* Description */}
+        {/* ── Description ────────────────────────────── */}
         <View className="mb-6">
           <Text variant="caption" className="text-content-tertiary font-sans-semibold uppercase tracking-widest text-[11px] mb-1.5">
             Description
@@ -240,6 +306,178 @@ export default function CreateScreen() {
           />
         </View>
 
+        {/* ── Poll section ────────────────────────────── */}
+        <View
+          style={{
+            marginBottom: 24,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: pollEnabled ? teal + '40' : borderColor,
+            overflow: 'hidden',
+          }}
+        >
+          {/* Toggle row */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 16,
+              paddingVertical: 14,
+              backgroundColor: pollEnabled
+                ? (isDark ? 'rgba(20,184,166,0.08)' : 'rgba(20,184,166,0.04)')
+                : inputBg,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <BarChart3 size={18} color={pollEnabled ? teal : labelColor} strokeWidth={2} />
+              <View>
+                <Text
+                  style={{ color: pollEnabled ? teal : textColor, fontWeight: '600', fontSize: 15 }}
+                >
+                  Add a Poll
+                </Text>
+                <Text style={{ color: labelColor, fontSize: 12, marginTop: 1 }}>
+                  Let buyers vote on something
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={pollEnabled}
+              onValueChange={setPollEnabled}
+              trackColor={{ false: borderColor, true: teal + '80' }}
+              thumbColor={pollEnabled ? teal : (isDark ? '#52525B' : '#D4D4D8')}
+            />
+          </View>
+
+          {/* Poll options (shown when enabled) */}
+          {pollEnabled && (
+            <View style={{ padding: 16, gap: 10 }}>
+              {/* Question choices */}
+              {pollChoices.map((choice, idx) => (
+                <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 11,
+                      borderWidth: 1.5,
+                      borderColor: borderColor,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: labelColor }}>
+                      {idx + 1}
+                    </Text>
+                  </View>
+                  <TextInput
+                    value={choice}
+                    onChangeText={v => updatePollChoice(idx, v)}
+                    placeholder={`Option ${idx + 1}`}
+                    placeholderTextColor="#8E8E93"
+                    style={{
+                      flex: 1,
+                      backgroundColor: inputBg,
+                      borderRadius: 10,
+                      paddingHorizontal: 12,
+                      paddingVertical: 9,
+                      fontSize: 14,
+                      color: textColor,
+                      borderWidth: 1,
+                      borderColor: choice.trim() ? teal + '60' : borderColor,
+                    }}
+                  />
+                  {pollChoices.length > 2 && (
+                    <TouchableOpacity
+                      onPress={() => removePollChoice(idx)}
+                      style={{
+                        padding: 6,
+                        borderRadius: 8,
+                        backgroundColor: isDark ? 'rgba(244,63,94,0.12)' : 'rgba(244,63,94,0.08)',
+                      }}
+                    >
+                      <Trash2 size={14} color="#F43F5E" strokeWidth={2} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+
+              {/* Add option button */}
+              {pollChoices.length < 5 && (
+                <TouchableOpacity
+                  onPress={addPollChoice}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingVertical: 9,
+                    paddingHorizontal: 12,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderStyle: 'dashed',
+                    borderColor: teal + '60',
+                    marginTop: 2,
+                  }}
+                >
+                  <Plus size={14} color={teal} strokeWidth={2.5} />
+                  <Text style={{ color: teal, fontSize: 13, fontWeight: '600' }}>
+                    Add option ({pollChoices.length}/5)
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Duration picker */}
+              <View style={{ marginTop: 4 }}>
+                <Text
+                  style={{
+                    color: labelColor,
+                    fontSize: 11,
+                    fontWeight: '700',
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.8,
+                    marginBottom: 8,
+                  }}
+                >
+                  Poll Duration
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {POLL_DURATIONS.map((dur, idx) => {
+                    const active = pollDurationIdx === idx;
+                    return (
+                      <TouchableOpacity
+                        key={idx}
+                        onPress={() => setPollDurationIdx(idx)}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 8,
+                          borderRadius: 10,
+                          alignItems: 'center',
+                          backgroundColor: active ? teal : inputBg,
+                          borderWidth: 1,
+                          borderColor: active ? teal : borderColor,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            fontWeight: '600',
+                            color: active ? '#fff' : labelColor,
+                          }}
+                        >
+                          {dur.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* ── Submit ─────────────────────────────────── */}
         <TouchableOpacity
           onPress={handleSubmit}
           disabled={isSubmitting}

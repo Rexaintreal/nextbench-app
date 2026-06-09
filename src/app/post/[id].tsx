@@ -25,6 +25,7 @@ import {
   Send, X, Bookmark,
 } from "lucide-react-native";
 import { toggleUpvote, toggleSavePost } from "@/lib/social";
+import PollDisplay from "@/components/ui/PollDisplay";
 
 interface Reply {
   id: string;
@@ -332,6 +333,11 @@ export default function PostDetailScreen() {
                 <Image source={{ uri: url }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
               </View>
             ))}
+
+            {/* Poll */}
+            {post.poll && (
+              <PollDisplay postId={post.id} poll={post.poll} />
+            )}
 
             {/* Action Bar */}
             <View className="flex-row items-center justify-between pt-3">
