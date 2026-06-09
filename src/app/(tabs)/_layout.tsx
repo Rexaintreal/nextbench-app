@@ -128,10 +128,11 @@ export default function TabLayout() {
             paddingTop: 10,
           },
           tabBarBackground: () => (
-            <BlurView
-              tint={isDark ? "dark" : "light"}
-              intensity={90}
-              style={StyleSheet.absoluteFill}
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: isDark ? 'rgba(18,18,18,0.95)' : 'rgba(255,255,255,0.95)' }
+              ]}
             />
           ),
         }}

@@ -182,7 +182,11 @@ export default function CreateScreen() {
                     : 'bg-surface-soft dark:bg-surface-dark-secondary'
                 }`}
               >
-                {category === cat && <Check size={13} color="#FFF" className="mr-1" />}
+                {category === cat && (
+                  <View style={{ marginRight: 4 }}>
+                    <Check size={13} color="#000" />
+                  </View>
+                )}
                 <Text variant="caption" className={`text-[13px] font-sans-medium ${
                   category === cat ? 'text-white' : 'text-content-secondary'
                 }`}>
