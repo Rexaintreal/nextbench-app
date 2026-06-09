@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { View, FlatList, RefreshControl, TouchableOpacity, Image, Alert, ScrollView } from "react-native";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { View, FlatList, RefreshControl, TouchableOpacity, Image, Alert, ScrollView, Animated } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Text } from "@/components/ui/Text";
@@ -34,7 +34,13 @@ export default function FeedScreen() {
 
   const [contentType, setContentType] = useState<'all' | 'posts' | 'marketplace' | 'for-you'>('all');
   const { colorScheme, isDark, toggleTheme } = useTheme();
-  
+
+  // Realtime feed update tracking
+  const flatListRef = useRef<FlatList>(null);
+  const [committedFeedItems, setCommittedFeedItems] = useState<FeedItem[]>([]);
+  const [pendingNewCount, setPendingNewCount] = useState(0);
+  const pillAnim = useRef(new Animated.Value(0)).current;
+  const prevTabRef = useRef(contentType);
 
   // Listen to approved posts
   useEffect(() => {
@@ -252,10 +258,55 @@ export default function FeedScreen() {
     }
   }, [rawPosts, products, contentType, followingIds, userData]);
 
+  // Sync committed feed: commit silently on tab switch or first load,
+  // show pill only when genuinely new items arrive on the same tab.
+  useEffect(() => {
+    if (!feedItems || loadingPosts || loadingProducts) return;
+
+    const tabChanged = prevTabRef.current !== contentType;
+    prevTabRef.current = contentType;
+
+    if (tabChanged || committedFeedItems.length === 0) {
+      // Tab just switched or initial load — commit without showing pill
+      setCommittedFeedItems(feedItems);
+      setPendingNewCount(0);
+      pillAnim.setValue(0);
+      return;
+    }
+
+    // Same tab — diff against what is currently shown
+    const committedIds = new Set(committedFeedItems.map(i => `${i.type}-${i.data.id}`));
+    const genuinelyNew = feedItems.filter(i => !committedIds.has(`${i.type}-${i.data.id}`));
+
+    if (genuinelyNew.length > 0) {
+      setPendingNewCount(genuinelyNew.length);
+      Animated.spring(pillAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 80,
+        friction: 10,
+      }).start();
+    }
+  }, [feedItems, contentType, loadingPosts, loadingProducts]);
+
+  const handleNewPostsPill = useCallback(() => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    setCommittedFeedItems(feedItems ?? []);
+    setPendingNewCount(0);
+    Animated.timing(pillAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [feedItems, pillAnim]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
+    setCommittedFeedItems(feedItems ?? []);
+    setPendingNewCount(0);
+    pillAnim.setValue(0);
     setTimeout(() => setRefreshing(false), 1000);
-  }, []);
+  }, [feedItems, pillAnim]);
 
   const handleUpvote = async (post: Post) => {
     if (!user) { Alert.alert('Sign In Required', 'You need to sign in to upvote posts.'); return; }
@@ -383,8 +434,56 @@ export default function FeedScreen() {
           <FeedSkeleton />
         </ScrollView>
       ) : (
-        <FlatList
-          data={feedItems}
+        <>
+          {/* Realtime "new posts" pill */}
+          {pendingNewCount > 0 && (
+            <Animated.View
+              style={{
+                position: 'absolute',
+                top: 130,
+                alignSelf: 'center',
+                zIndex: 10,
+                transform: [
+                  {
+                    translateY: pillAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-50, 0],
+                    }),
+                  },
+                ],
+                opacity: pillAnim,
+              }}
+            >
+              <TouchableOpacity
+                onPress={handleNewPostsPill}
+                activeOpacity={0.85}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: '#14B8A6',
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  borderRadius: 20,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.18,
+                  shadowRadius: 10,
+                  elevation: 6,
+                  gap: 6,
+                }}
+              >
+                <Text
+                  variant="label"
+                  style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}
+                >
+                  ↑ {pendingNewCount} new {pendingNewCount === 1 ? 'post' : 'posts'}
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+          <FlatList
+          ref={flatListRef}
+          data={committedFeedItems}
           keyExtractor={item => `${item.type}-${item.data.id}`}
           renderItem={renderItem}
           ListHeaderComponent={
@@ -427,6 +526,7 @@ export default function FeedScreen() {
             </View>
           }
         />
+        </>
       )}
 
       {/* Floating Compose FAB */}
