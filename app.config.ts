@@ -26,8 +26,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       monochromeImage: "./assets/images/android-icon-monochrome.png",
       backgroundColor: "#1C1C1E",
     },
-    googleServicesFile: "./google-services.json",
+    googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
     package: "in.nextbench.app",
+    versionCode: 1,
   },
 
   web: {
@@ -66,7 +67,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
 
   extra: {
     eas: {
-      projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID,
+      projectId: "3c26faa6-d133-48db-bda6-91772cb3f9c6", 
     },
   },
 });

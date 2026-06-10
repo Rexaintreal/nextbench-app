@@ -16,6 +16,7 @@ import React, {
   useState,
   type ReactNode,
 } from "react";
+import { View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useColorScheme } from "nativewind";
 
@@ -35,17 +36,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const { colorScheme, setColorScheme } = useColorScheme();
   const [ready, setReady] = useState(false);
 
-  // On mount: load saved preference and apply it
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
       .then((saved) => {
         if (saved === "dark" || saved === "light") {
           setColorScheme(saved);
         }
+        // Nothing saved → keep OS default, NativeWind already handles it
       })
-      .catch(() => {
-        // Ignore read errors — fall back to OS default
-      })
+      .catch(() => {})
       .finally(() => setReady(true));
   }, []);
 
@@ -59,20 +58,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setTheme(next);
   };
 
-  // Don't render until we've loaded the saved preference to avoid
-  // a flash of the wrong theme on startup
-  if (!ready) return null;
+  const effectiveScheme = (colorScheme ?? "light") as Scheme;
 
   return (
     <ThemeContext.Provider
       value={{
-        colorScheme: (colorScheme ?? "light") as Scheme,
-        isDark: colorScheme === "dark",
+        colorScheme: effectiveScheme,
+        isDark: effectiveScheme === "dark",
         toggleTheme,
         setTheme,
       }}
     >
-      {children}
+      <View style={{ flex: 1, opacity: ready ? 1 : 0 }}>
+        {children}
+      </View>
     </ThemeContext.Provider>
   );
 }
