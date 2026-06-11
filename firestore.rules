@@ -1,0 +1,552 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+
+    function isValidId(id) { return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(["name", "email", "school", "verified", "createdAt", "updatedAt"])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.email is string && data.email.size() > 0 && data.email.size() <= 150
+        && data.school is string && data.school.size() > 0 && data.school.size() <= 100
+        && (!data.keys().hasAny(['city']) || (data.city is string && data.city.size() > 0 && data.city.size() <= 100))
+        && data.verified is bool
+        && (!data.keys().hasAny(['reputation']) || data.reputation is number)
+        && (!data.keys().hasAny(['isAdmin']) || data.isAdmin is bool)
+        && (!data.keys().hasAny(['verificationStatus']) || data.verificationStatus in ['pending', 'approved', 'rejected', 'flagged_manual'])
+        && (!data.keys().hasAny(['verificationRejectionReason']) || (data.verificationRejectionReason == null || data.verificationRejectionReason is string))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        // Cloudinary URLs can be long — allow up to 2000 chars
+        && (!data.keys().hasAny(['profilePicture']) || (data.profilePicture == null || (data.profilePicture is string && data.profilePicture.size() <= 2000)))
+        && (!data.keys().hasAny(['idCardUrl']) || (data.idCardUrl == null || (data.idCardUrl is string && data.idCardUrl.size() <= 2000)))
+        && (!data.keys().hasAny(['selfieUrl']) || (data.selfieUrl == null || (data.selfieUrl is string && data.selfieUrl.size() <= 2000)))
+        && (!data.keys().hasAny(['about']) || (data.about == null || (data.about is string && data.about.size() <= 600)))
+        && (!data.keys().hasAny(['anonymousPersonaName']) || (data.anonymousPersonaName == null || data.anonymousPersonaName is string))
+        // Organization fields
+        && (!data.keys().hasAny(['accountType']) || data.accountType in ['student', 'organization'])
+        && (!data.keys().hasAny(['orgName']) || (data.orgName == null || (data.orgName is string && data.orgName.size() <= 200)))
+        && (!data.keys().hasAny(['orgType']) || (data.orgType == null || data.orgType in ['company', 'school', 'coaching', 'ngo', 'other']))
+        && (!data.keys().hasAny(['orgDocumentUrl']) || (data.orgDocumentUrl == null || (data.orgDocumentUrl is string && data.orgDocumentUrl.size() <= 2000)))
+        && (!data.keys().hasAny(['orgWebsite']) || (data.orgWebsite == null || (data.orgWebsite is string && data.orgWebsite.size() <= 500)))
+        && (!data.keys().hasAny(['orgDescription']) || (data.orgDescription == null || (data.orgDescription is string && data.orgDescription.size() <= 600)))
+        // Referral System
+        && (!data.keys().hasAny(['referralCode']) || (data.referralCode == null || data.referralCode is string))
+        && (!data.keys().hasAny(['referredBy']) || (data.referredBy == null || data.referredBy is string))
+        && (!data.keys().hasAny(['referralCount']) || (data.referralCount is number));
+    }
+
+    match /users/{userId} {
+      allow get: if true;
+      allow list: if true;
+      
+      allow create: if isVerified() 
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && isValidUser(incoming())
+        && incoming().email == request.auth.token.email
+        && incoming().verified == false
+        && incoming().reputation == 5.0
+        && incoming().isAdmin == false
+        && incoming().verificationStatus == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+        
+      allow update: if isSignedIn() && isValidId(userId) && (
+        (incoming().diff(existing()).affectedKeys().hasOnly(['anonymousPersonaName', 'updatedAt'])
+          && request.auth.uid == userId
+          && (!incoming().keys().hasAny(['anonymousPersonaName']) || (incoming().anonymousPersonaName == null || incoming().anonymousPersonaName is string))
+          && incoming().updatedAt == request.time)
+        ||
+        (incoming().diff(existing()).affectedKeys().hasOnly(['username', 'lastUsernameChange', 'name', 'city', 'profilePicture', 'about', 'idCardUrl', 'selfieUrl', 'verificationStatus', 'updatedAt', 'anonymousPersonaName', 'orgName', 'orgWebsite', 'orgDescription', 'referralCode']) 
+          && request.auth.uid == userId
+          && isValidUser(incoming())
+          && (incoming().get('verificationStatus', 'approved') == existing().get('verificationStatus', 'approved') || (existing().get('verificationStatus', 'approved') in ['rejected', 'flagged_manual'] && incoming().get('verificationStatus', 'approved') == 'pending'))
+          && (!incoming().diff(existing()).affectedKeys().hasAny(['referralCode']) || existing().get('referralCode', null) == null)
+          && incoming().updatedAt == request.time)
+        ||
+        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['verified', 'reputation', 'isAdmin', 'verificationStatus', 'verificationRejectionReason', 'city', 'school', 'updatedAt'])
+          && isValidUser(incoming())
+          && incoming().updatedAt == request.time)
+        ||
+        // Presence heartbeat
+        (request.auth.uid == userId
+          && incoming().diff(existing()).affectedKeys().hasOnly(['online', 'lastSeen'])
+          && incoming().online is bool
+          && incoming().lastSeen == request.time)
+      );
+
+      allow delete: if isAdmin();
+
+      match /referrals/{referredId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn()
+          && request.auth.uid == referredId
+          && incoming().timestamp == request.time;
+      }
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll(["sellerId", "sellerName", "sellerSchool", "title", "price", "condition", "category", "image", "description", "meetupAvailable", "deliveryAvailable", "status", "createdAt", "updatedAt"])
+        && data.sellerId is string && data.sellerId.size() > 0 && data.sellerId.size() <= 128
+        && data.sellerName is string && data.sellerName.size() > 0 && data.sellerName.size() <= 100
+        && data.sellerSchool is string && data.sellerSchool.size() > 0 && data.sellerSchool.size() <= 100
+        && (!data.keys().hasAny(['city']) || (data.city is string && data.city.size() > 0 && data.city.size() <= 100))
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 100
+        && data.price is number && data.price >= 0
+        && data.condition is string && data.condition in ['Brand New', 'Like New', 'Good', 'Used']
+        && data.category is string && data.category.size() > 0 && data.category.size() <= 50
+        // Cloudinary image URLs can exceed 1000 chars — allow up to 2000
+        && data.image is string && data.image.size() > 0 && data.image.size() <= 2000
+        && (!data.keys().hasAny(['images']) || (data.images is list && data.images.size() > 0 && data.images.size() <= 10))
+        && data.description is string && data.description.size() <= 2000
+        && data.meetupAvailable is bool
+        && data.deliveryAvailable is bool
+        && data.status is string && data.status in ['pending', 'available', 'reserved', 'sold', 'rejected']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!data.keys().hasAny(['reservedById']) || (data.reservedById == null || (data.reservedById is string && data.reservedById.size() > 0 && data.reservedById.size() <= 128)));
+    }
+
+    match /products/{productId} {
+      allow get: if true;
+      allow list: if true;
+      
+      allow create: if isVerified() 
+        && isValidId(productId)
+        && request.auth.uid == incoming().sellerId
+        && isValidProduct(incoming())
+        && (!incoming().keys().hasAny(['reservedById']))
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+        
+      allow update: if isVerified() && isValidId(productId) && isValidProduct(incoming()) && (
+        // Seller updates product details
+        (request.auth.uid == existing().sellerId 
+          && existing().status in ['pending', 'available']
+          && incoming().status == existing().status
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'price', 'condition', 'category', 'image', 'images', 'description', 'meetupAvailable', 'deliveryAvailable', 'city', 'updatedAt'])
+          && incoming().updatedAt == request.time)
+        ||
+        // Buyer reserves product
+        (existing().status == 'available'
+          && incoming().status == 'reserved'
+          && request.auth.uid != existing().sellerId
+          && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reservedById', 'updatedAt'])
+          && incoming().reservedById == request.auth.uid
+          && incoming().updatedAt == request.time)
+        ||
+        // Seller or buyer unreserves
+        (existing().status == 'reserved'
+          && incoming().status == 'available'
+          && (request.auth.uid == existing().sellerId || request.auth.uid == existing().reservedById)
+          && incoming().updatedAt == request.time)
+        ||
+        // Seller marks as sold
+        (existing().status == 'reserved'
+          && incoming().status == 'sold'
+          && request.auth.uid == existing().sellerId
+          && incoming().updatedAt == request.time)
+        ||
+        // Admin overrides (including approval)
+        (isAdmin() && incoming().updatedAt == request.time)
+      );
+      
+      allow delete: if isVerified() && isValidId(productId) && (request.auth.uid == existing().sellerId || isAdmin());
+    }
+
+    // === CHAT ROOMS ===
+    function isValidChatRoom(data) {
+      return data.keys().hasAll(['participants', 'updatedAt'])
+        && data.participants is list && data.participants.size() == 2
+        && data.updatedAt is timestamp
+        && (!data.keys().hasAny(['productId']) || data.productId is string)
+        && (!data.keys().hasAny(['type']) || data.type in ['dm', 'product']);
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['senderId', 'createdAt'])
+        && (data.keys().hasAny(['text', 'image', 'sharedPost']))
+        && (!data.keys().hasAny(['text']) || (data.text is string && data.text.size() <= 2000))
+        && (!data.keys().hasAny(['image']) || (data.image is string && data.image.size() <= 2000))
+        && (!data.keys().hasAny(['sharedPost']) || (data.sharedPost is map));
+    }
+
+    match /chatRooms/{roomId} {
+      // get: only participants can fetch a specific chat room by ID
+      allow get: if isSignedIn() && request.auth.uid in resource.data.participants;
+      // list: allow any signed-in user — the client query always filters by
+      // `where('participants', 'array-contains', user.uid)` and a composite
+      // index enforces it; we cannot use resource.data.participants here since
+      // Firestore security rules don't support per-document checks on list queries.
+      allow list: if isSignedIn();
+      
+      allow create: if isVerified() 
+        && isValidId(roomId)
+        && request.auth.uid in incoming().participants
+        && isValidChatRoom(incoming());
+        
+      allow update: if isSignedIn() && isValidId(roomId)
+        && request.auth.uid in existing().participants
+        && (incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'lastSenderId', 'updatedAt', 'pinnedMessageId', 'pinnedMessageText', 'unreadBy', 'status', 'requestedBy', 'mutedBy'])
+        || isAdmin());
+
+      allow delete: if isVerified() && isValidId(roomId)
+        && request.auth.uid in existing().participants
+        && existing().get('status', '') == 'pending';
+
+      match /messages/{messageId} {
+        allow list: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chatRooms/$(roomId)).data.participants;
+        allow create: if isVerified() 
+          && isValidId(messageId)
+          && request.auth.uid == incoming().senderId
+          && request.auth.uid in get(/databases/$(database)/documents/chatRooms/$(roomId)).data.participants
+          && isValidMessage(incoming())
+          && incoming().createdAt == request.time;
+          
+        allow update: if isVerified() 
+          && isValidId(messageId)
+          && request.auth.uid in get(/databases/$(database)/documents/chatRooms/$(roomId)).data.participants
+          && (
+             incoming().diff(existing()).affectedKeys().hasOnly(['deletedFor'])
+             ||
+             (incoming().diff(existing()).affectedKeys().hasOnly(['isDeletedForEveryone', 'text', 'image']) 
+              && request.auth.uid == existing().senderId)
+              ||
+                incoming().diff(existing()).affectedKeys().hasOnly(['reactions'])
+          );
+
+        allow delete: if isVerified() 
+          && request.auth.uid in get(/databases/$(database)/documents/chatRooms/$(roomId)).data.participants
+          && get(/databases/$(database)/documents/chatRooms/$(roomId)).data.get('status', '') == 'pending';
+      }
+    }
+
+    // === CLUBS (Group Chats) ===
+    match /clubs/{clubId} {
+      // Anyone signed in can read public clubs; members can read private clubs
+      allow get: if isSignedIn() && (resource.data.type == 'public' || request.auth.uid in resource.data.memberIds);
+      // list: allow signed-in users — client queries filter appropriately
+      allow list: if isSignedIn();
+
+      // Create: verified user, must be lead and first member
+      allow create: if isVerified()
+        && incoming().leadId == request.auth.uid
+        && request.auth.uid in incoming().memberIds
+        && incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 100
+        && incoming().type in ['public', 'private']
+        && incoming().inviteCode is string && incoming().inviteCode.size() > 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      // Update: must be a member
+      allow update: if isVerified()
+        && (request.auth.uid in existing().memberIds
+            // Allow non-members to add themselves (join)
+            || (incoming().diff(existing()).affectedKeys().hasOnly(['memberIds', 'memberCount', 'updatedAt'])
+                && request.auth.uid in incoming().memberIds))
+        && incoming().updatedAt == request.time;
+
+      // Delete: lead only
+      allow delete: if isVerified() && request.auth.uid == existing().leadId;
+
+      // Club messages
+      match /messages/{messageId} {
+        allow list: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/clubs/$(clubId)).data.memberIds;
+
+        allow create: if isVerified()
+          && request.auth.uid == incoming().senderId
+          && request.auth.uid in get(/databases/$(database)/documents/clubs/$(clubId)).data.memberIds
+          && incoming().createdAt == request.time;
+
+        allow update: if isVerified()
+          && request.auth.uid in get(/databases/$(database)/documents/clubs/$(clubId)).data.memberIds;
+      }
+    }
+
+
+    // === WISHLISTS ===
+    match /wishlists/{wishlistId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && incoming().userId == request.auth.uid
+        && incoming().productId is string
+        && incoming().productId.size() > 0;
+
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // === REVIEWS ===
+    match /reviews/{reviewId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && incoming().reviewerId == request.auth.uid
+        && incoming().reviewerName is string
+        && incoming().productId is string
+        && incoming().rating is number
+        && incoming().rating >= 1
+        && incoming().rating <= 5
+        && incoming().createdAt == request.time;
+    }
+
+    // === NOTIFICATIONS ===
+    match /notifications/{notifId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // list: allow signed-in users — client query always filters by
+      // `where('userId', '==', user.uid)` so only own notifications are returned.
+      // resource.data is not available on list queries in security rules.
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && incoming().userId is string
+        && incoming().type is string
+        && incoming().title is string
+        && incoming().read == false;
+
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // === POSTS (COMMUNITY) ===
+    function isValidPost(data) {
+      return data.keys().hasAll(['title', 'content', 'type', 'school', 'authorId', 'authorName', 'status', 'createdAt', 'updatedAt'])
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && data.content is string && data.content.size() > 0 && data.content.size() <= 5000
+        && data.type is string && data.type in ['info', 'notes', 'event', 'others', 'confession']
+        && data.school is string && data.school.size() > 0
+        && data.authorId is string && data.authorId.size() > 0
+        && data.authorName is string && data.authorName.size() > 0
+        && data.status is string && data.status in ['pending', 'approved', 'rejected']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!data.keys().hasAny(['city']) || (data.city == null || data.city is string))
+        && (!data.keys().hasAny(['upvotesCount']) || (data.upvotesCount is number))
+        && (!data.keys().hasAny(['repliesCount']) || (data.repliesCount is number))
+        && (!data.keys().hasAny(['imageUrl']) || (data.imageUrl is string))
+        && (!data.keys().hasAny(['imageUrls']) || (data.imageUrls is list))
+        && (!data.keys().hasAny(['privacy']) || (data.privacy in ['public', 'private']))
+        && (!data.keys().hasAny(['isAnonymous']) || (data.isAnonymous is bool))
+        && (!data.keys().hasAny(['personaName']) || (data.personaName == null || data.personaName is string))
+        && (!data.keys().hasAny(['authorProfilePicture']) || (data.authorProfilePicture == null || data.authorProfilePicture is string))
+        && (!data.keys().hasAny(['reactionsCount']) || (data.reactionsCount == null || data.reactionsCount is map))
+        && (!data.keys().hasAny(['poll']) || (data.poll == null || data.poll is map));
+    }
+
+    match /posts/{postId} {
+      // Anyone can read posts, but the client will filter by status == 'approved' for public feed
+      allow get: if true;
+      allow list: if true;
+
+      allow create: if isVerified()
+        && isValidId(postId)
+        && request.auth.uid == incoming().authorId
+        && isValidPost(incoming())
+        && (
+          incoming().status == 'pending'
+          ||
+          incoming().status == 'approved'
+        )
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerified() && isValidId(postId) && (
+        // Author updates post content
+        (request.auth.uid == existing().authorId
+          && incoming().status == existing().status
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'type', 'city', 'privacy', 'updatedAt'])
+          && incoming().updatedAt == request.time)
+        ||
+        // Any verified user can update upvotes, replies, reactions counts, and poll votes
+        (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'repliesCount', 'reactionsCount', 'poll', 'updatedAt']))
+        ||
+        (isAdmin() && incoming().updatedAt == request.time)
+      );
+
+      allow delete: if isVerified() && isValidId(postId) && (request.auth.uid == existing().authorId || isAdmin());
+    }
+
+    // === POST UPVOTES ===
+    match /post_upvotes/{upvoteId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isVerified() && incoming().userId == request.auth.uid && incoming().postId is string;
+      allow delete: if isVerified() && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/posts/$(resource.data.postId)).data.authorId == request.auth.uid || isAdmin());
+    }
+
+    // === POST DOWNVOTES ===
+    match /post_downvotes/{downvoteId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isVerified() && incoming().userId == request.auth.uid && incoming().postId is string;
+      allow delete: if isVerified() && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/posts/$(resource.data.postId)).data.authorId == request.auth.uid || isAdmin());
+    }
+
+    // === REPLY UPVOTES ===
+    match /reply_upvotes/{upvoteId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isVerified() && incoming().userId == request.auth.uid && incoming().replyId is string;
+      allow delete: if isVerified() && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/post_replies/$(resource.data.replyId)).data.authorId == request.auth.uid || isAdmin());
+    }
+
+    // === SAVED POSTS ===
+    match /saved_posts/{saveId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && incoming().postId is string;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // === POST REACTIONS (CONFESSIONS) ===
+    match /post_reactions/{reactionId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isVerified() 
+        && incoming().userId == request.auth.uid 
+        && incoming().postId is string
+        && incoming().reaction is string
+        && incoming().createdAt == request.time;
+      allow update: if isVerified() 
+        && resource.data.userId == request.auth.uid 
+        && incoming().diff(existing()).affectedKeys().hasOnly(['reaction', 'updatedAt'])
+        && incoming().updatedAt == request.time;
+      allow delete: if isVerified() && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/posts/$(resource.data.postId)).data.authorId == request.auth.uid || isAdmin());
+    }
+
+    // === POST REPLIES ===
+    match /post_replies/{replyId} {
+      allow read: if true;
+      allow list: if true;
+      allow create: if isVerified() 
+        && incoming().postId is string
+        && incoming().authorId == request.auth.uid
+        && incoming().authorName is string
+        && incoming().authorSchool is string
+        && incoming().content is string
+        && incoming().content.size() > 0 && incoming().content.size() <= 1000
+        && (!incoming().keys().hasAny(['parentId']) || (incoming().parentId == null || incoming().parentId is string))
+        && (!incoming().keys().hasAny(['upvotesCount']) || (incoming().upvotesCount is number))
+        && (!incoming().keys().hasAny(['repliesCount']) || (incoming().repliesCount is number))
+        && incoming().createdAt == request.time;
+      allow update: if isVerified() && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'repliesCount', 'updatedAt'])
+      );
+      allow delete: if isVerified() && (resource.data.authorId == request.auth.uid || get(/databases/$(database)/documents/posts/$(resource.data.postId)).data.authorId == request.auth.uid || isAdmin());
+    }
+
+    // === REPLY UPVOTES ===
+    match /reply_upvotes/{upvoteId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isVerified() && incoming().userId == request.auth.uid && incoming().replyId is string;
+      allow delete: if isVerified() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // === FOLLOWS ===
+    match /follows/{followId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+      
+      allow create: if isVerified()
+        && isValidId(followId)
+        && incoming().followerId == request.auth.uid
+        && incoming().followerId is string
+        && incoming().followingId is string
+        && incoming().followingId.size() > 0
+        && incoming().followerId != incoming().followingId
+        && incoming().createdAt == request.time;
+      
+      allow delete: if isVerified() 
+        && resource.data.followerId == request.auth.uid;
+    }
+
+    // === SCHOOL REQUESTS ===
+    function isValidSchoolRequest(data) {
+      return data.keys().hasAll(['schoolName', 'city', 'website', 'idCardUrl', 'requesterName', 'requesterEmail', 'status', 'createdAt'])
+        && data.schoolName is string && data.schoolName.size() > 0
+        && data.city is string && data.city.size() > 0
+        && data.website is string && data.website.size() > 0
+        && data.idCardUrl is string && data.idCardUrl.size() > 0
+        && data.requesterName is string && data.requesterName.size() > 0
+        && data.requesterEmail is string && data.requesterEmail.size() > 0
+        && data.status is string && data.status in ['pending', 'approved', 'rejected']
+        && data.createdAt is timestamp;
+    }
+
+    match /school_requests/{requestId} {
+      allow read: if isAdmin();
+      
+      // Allow unauthenticated create since this happens during signup
+      allow create: if isValidId(requestId)
+        && isValidSchoolRequest(incoming())
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time;
+
+      allow update: if isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+      allow delete: if isAdmin();
+    }
+
+    // === SCHOOLS ===
+    match /schools/{schoolId} {
+      allow read: if true;
+      
+      allow create: if isAdmin()
+        && incoming().name is string
+        && incoming().name.size() > 0
+        && incoming().createdAt == request.time;
+        
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    // === BLOCKS ===
+    match /blocks/{blockId} {
+      allow get: if isSignedIn() && (resource == null || resource.data.blockerId == request.auth.uid || resource.data.blockedId == request.auth.uid);
+      allow list: if isSignedIn();
+      allow create: if isVerified() 
+        && incoming().blockerId == request.auth.uid
+        && incoming().blockedId is string
+        && incoming().createdAt == request.time;
+      allow delete: if isVerified() && resource.data.blockerId == request.auth.uid;
+    }
+
+    // === REPORTS ===
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow list: if isAdmin();
+      allow create: if isVerified()
+        && incoming().reporterId == request.auth.uid
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // === USERNAMES ===
+    match /usernames/{username} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isVerified()
+        && incoming().userId == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow delete: if isVerified() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

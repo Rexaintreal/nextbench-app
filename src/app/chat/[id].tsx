@@ -5,7 +5,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import { ArrowLeft, Send, Image as ImageIcon, User, X, Reply, MoreVertical } from "lucide-react-native";
-import { blockUser } from "@/lib/blocks";
+import { blockUser, unblockUser, useBlockStatus } from "@/lib/blocks";
 import firestore from "@react-native-firebase/firestore";
 import { uploadChatImageMobile } from '@/services/firebase/storage';
 import * as ImagePicker from "expo-image-picker";
@@ -126,6 +126,7 @@ export default function ChatRoomScreen() {
   const [forwardChats, setForwardChats] = useState<any[]>([]);
   const [loadingChats, setLoadingChats] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const { isBlocked } = useBlockStatus(otherUser?.id);
   const [roomStatus, setRoomStatus] = useState<'active' | 'pending'>('active');
   const [requestedBy, setRequestedBy] = useState<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -326,18 +327,19 @@ export default function ChatRoomScreen() {
     if (isMe) {
       actions.push({
         text: "Delete for everyone", style: "destructive",
-        onPress: () => AppAlert.alert("Delete for everyone", "This cannot be undone.", [
-          { text: "Cancel", style: "cancel" },
-          { text: "Delete", style: "destructive", onPress: () => handleDeleteForEveryone(msg.id) }
-        ])
-      });
-    }
+      onPress: () => setTimeout(() => AppAlert.alert("Delete for everyone", "This cannot be undone.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => handleDeleteForEveryone(msg.id) }
+      ]), 300)
+    });
+  }
     actions.push({ text: "Cancel", style: "cancel" });
 
     AppAlert.alert("Message Options", undefined, actions);
   };
 
   const handleClearChat = () => {
+    setTimeout(() => {
     AppAlert.alert("Clear Chat", "This will clear all messages for you only.", [
       { text: "Cancel", style: "cancel" },
       {
@@ -353,6 +355,7 @@ export default function ChatRoomScreen() {
         },
       },
     ]);
+    }, 300);
   };
 
   const handleToggleMute = async () => {
@@ -367,7 +370,10 @@ export default function ChatRoomScreen() {
         setIsMuted(true);
         AppAlert.alert("Muted", "You won't receive notifications from this chat.");
       }
-    } catch (err) { console.error("Mute toggle failed", err); }
+     } catch (err) {
+     console.error("Mute toggle failed", err);
+     AppAlert.alert("Error", "Failed to update notification settings.");
+   }
   };
 
   const handleBlockUser = () => {
@@ -384,13 +390,35 @@ export default function ChatRoomScreen() {
         },
       },
     ]);
-  };
-
-  const showChatOptions = () => {
+  };  
+  const handleUnblockUser = () => {
+    if (!user || !otherUser?.id) return;
+    setTimeout(() => {
+        AppAlert.alert("Unblock User", `Unblock ${otherUser.name || 'this user'}?`, [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Unblock",
+            onPress: async () => {
+              try {
+                await unblockUser(user.uid, otherUser.id);
+                AppAlert.alert("Unblocked", `${otherUser.name || 'User'} has been unblocked.`);
+              } catch (err) {
+                AppAlert.alert("Error", "Failed to unblock user.");
+              }
+            },
+          },
+        ]);
+      }, 300);
+    };
+    const showChatOptions = () => {
     AppAlert.alert("Chat Options", undefined, [
       { text: "Clear Chat", onPress: handleClearChat },
       { text: isMuted ? "Unmute Notifications" : "Mute Notifications", onPress: handleToggleMute },
-      { text: "Block User", style: "destructive", onPress: handleBlockUser },
+      {
+        text: isBlocked ? "Unblock User" : "Block User",
+        style: "destructive",
+        onPress: isBlocked ? handleUnblockUser : handleBlockUser,
+      },
       { text: "Cancel", style: "cancel" },
     ]);
   };
