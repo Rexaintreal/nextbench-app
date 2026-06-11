@@ -143,9 +143,14 @@ export default function PostDetailScreen() {
     return () => unsub();
   }, [id, user]);
 
+  const [upvoting, setUpvoting] = useState(false);
+
   const handleUpvote = async () => {
-    if (!user || !id) return;
-    try { await toggleUpvote(id, user.uid); } catch (err) { console.error(err); }
+    if (!user || !id || upvoting) return;
+    setUpvoting(true);
+    try { await toggleUpvote(id, user.uid); }
+    catch (err) { console.error(err); }
+    finally { setUpvoting(false); }
   };
 
   const handleToggleSave = async () => {

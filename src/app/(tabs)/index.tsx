@@ -286,8 +286,25 @@ export default function FeedScreen() {
         tension: 80,
         friction: 10,
       }).start();
+    } else {
+      // No new items, but existing items (likes, comments, poll votes, etc.)
+      // may have changed — silently refresh their data in place so cards
+      // stay live without disrupting scroll position or showing the pill.
+      const feedDataById = new Map(feedItems.map(i => [`${i.type}-${i.data.id}`, i]));
+      setCommittedFeedItems(prev => {
+        let changed = false;
+        const next = prev.map(item => {
+          const updated = feedDataById.get(`${item.type}-${item.data.id}`);
+          if (updated && JSON.stringify(updated.data) !== JSON.stringify(item.data)) {
+            changed = true;
+            return updated;
+          }
+          return item;
+        });
+        return changed ? next : prev;
+      });
     }
-  }, [feedItems, contentType, loadingPosts, loadingProducts]);
+  }, [feedItems, contentType, loadingPosts, loadingProducts]);   // <-- ADD THIS LINE BACK
 
   const handleNewPostsPill = useCallback(() => {
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });

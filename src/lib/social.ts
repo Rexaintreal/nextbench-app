@@ -20,34 +20,35 @@ export async function toggleUpvote(
   postId: string,
   userId: string
 ): Promise<void> {
-  // Find existing upvote doc
-  const upvoteQuery = await firestore()
-    .collection("post_upvotes")
-    .where("postId", "==", postId)
-    .where("userId", "==", userId)
-    .get();
-
+  const postUpvotesRef = firestore().collection("post_upvotes");
   const postRef = firestore().collection("posts").doc(postId);
 
-  if (!upvoteQuery.empty) {
-    // Already upvoted → remove
-    const upvoteDoc = upvoteQuery.docs[0];
-    await upvoteDoc.ref.delete();
-    await postRef.update({
-      upvotesCount: firestore.FieldValue.increment(-1),
+  const existingQuery = await postUpvotesRef
+    .where("postId", "==", postId)
+    .where("userId", "==", userId)
+    .get({ source: 'server' });
+
+  if (!existingQuery.empty) {
+    const batch = firestore().batch();
+    existingQuery.docs.forEach((doc) => batch.delete(doc.ref));
+    batch.update(postRef, {
+      upvotesCount: firestore.FieldValue.increment(-existingQuery.size),
       updatedAt: firestore.FieldValue.serverTimestamp(),
     });
+    await batch.commit();
   } else {
-    // Not upvoted → add
-    await firestore().collection("post_upvotes").add({
+    const newRef = postUpvotesRef.doc(`${postId}_${userId}`);
+    const batch = firestore().batch();
+    batch.set(newRef, {
       postId,
       userId,
       createdAt: firestore.FieldValue.serverTimestamp(),
     });
-    await postRef.update({
+    batch.update(postRef, {
       upvotesCount: firestore.FieldValue.increment(1),
       updatedAt: firestore.FieldValue.serverTimestamp(),
     });
+    await batch.commit();
   }
 }
 
