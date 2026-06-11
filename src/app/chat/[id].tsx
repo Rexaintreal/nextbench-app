@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, FlatList, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Image, ImageBackground, useColorScheme, Modal, ScrollView } from "react-native";
+import { View, FlatList, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Keyboard, Platform, Image, ImageBackground, useColorScheme, Modal, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
@@ -128,8 +128,21 @@ export default function ChatRoomScreen() {
   const [isMuted, setIsMuted] = useState(false);
   const [roomStatus, setRoomStatus] = useState<'active' | 'pending'>('active');
   const [requestedBy, setRequestedBy] = useState<string | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const flatListRef = useRef<FlatList>(null);
+
+  // Android keyboard listener
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const show = Keyboard.addListener("keyboardDidShow", (e) => {
+      setKeyboardHeight(e.endCoordinates.height + 24);
+    });
+    const hide = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardHeight(0);
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   useEffect(() => {
     if (!user || !roomId) return;
@@ -304,7 +317,6 @@ export default function ChatRoomScreen() {
     if (msg.isDeletedForEveryone) return;
     const isMe = msg.senderId === user?.uid;
 
-    // Cross-platform action sheet using Alert (works on both iOS & Android)
     const actions: Array<{ text: string; style?: 'cancel' | 'destructive' | 'default'; onPress?: () => void }> = [
       { text: "Reply", onPress: () => setReplyingTo(msg) },
       { text: "Forward", onPress: () => openForwardModal(msg) },
@@ -375,7 +387,6 @@ export default function ChatRoomScreen() {
   };
 
   const showChatOptions = () => {
-    // Cross-platform: Alert.alert works on both iOS and Android
     AppAlert.alert("Chat Options", undefined, [
       { text: "Clear Chat", onPress: handleClearChat },
       { text: isMuted ? "Unmute Notifications" : "Mute Notifications", onPress: handleToggleMute },
@@ -383,8 +394,6 @@ export default function ChatRoomScreen() {
       { text: "Cancel", style: "cancel" },
     ]);
   };
-
-
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -448,142 +457,56 @@ export default function ChatRoomScreen() {
           </TouchableOpacity>
         </View>
 
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ImageBackground
-            source={isDark
-              ? require('../../../assets/images/chatbackground.png')
-              : require('../../../assets/images/chatbackgroundLight.png')}
-            style={{ flex: 1, width: '100%', height: '100%' }}
-            imageStyle={{ resizeMode: "repeat" }}
-          >
-            <FlatList
-              ref={flatListRef}
-              data={messages}
-              keyExtractor={item => item.id}
-              renderItem={({ item }) => (
-                <MessageItem
-                  item={item}
-                  user={user}
-                  isDark={isDark}
-                  handleMessageLongPress={handleMessageLongPress}
-                  setReplyingTo={setReplyingTo}
-                />
-              )}
-              inverted={true}
-              contentContainerStyle={{ paddingVertical: 16 }}
+        {/* iOS: KeyboardAvoidingView | Android: manual paddingBottom */}
+        {Platform.OS === 'ios' ? (
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+            <ChatBody
+              isDark={isDark}
+              roomId={roomId}
+              messages={messages}
+              user={user}
+              otherUser={otherUser}
+              flatListRef={flatListRef}
+              roomStatus={roomStatus}
+              requestedBy={requestedBy}
+              replyingTo={replyingTo}
+              setReplyingTo={setReplyingTo}
+              newMessage={newMessage}
+              setNewMessage={setNewMessage}
+              isUploading={isUploading}
+              handleSend={handleSend}
+              pickImage={pickImage}
+              handleMessageLongPress={handleMessageLongPress}
+              borderColor={borderColor}
+              setRoomStatus={setRoomStatus}
+              setRequestedBy={setRequestedBy}
             />
-          </ImageBackground>
-
-          {/* Pending Chat Request Banner */}
-          {roomStatus === 'pending' && requestedBy && (
-            requestedBy === user?.uid ? (
-              <View className="px-4 py-3 bg-amber-500/10 items-center justify-center">
-                <Text variant="caption" className="text-amber-600 dark:text-amber-400 font-sans-semibold text-center">
-                  ⏳ Chat request pending. They need to accept before you can send more messages.
-                </Text>
-              </View>
-            ) : (
-              <View className="px-4 py-3 bg-brand-teal/10">
-                <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted text-center mb-2">
-                  {otherUser?.name || 'Someone'} wants to start a conversation.
-                </Text>
-                <View className="flex-row justify-center gap-3">
-                  <TouchableOpacity
-                    onPress={() => {
-                      AppAlert.alert('Decline', 'Decline this chat request?', [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Decline', style: 'destructive', onPress: async () => {
-                            try {
-                              const msgsSnap = await firestore().collection('chatRooms').doc(roomId).collection('messages').get();
-                              const batch = firestore().batch();
-                              msgsSnap.docs.forEach(d => batch.delete(d.ref));
-                              batch.delete(firestore().collection('chatRooms').doc(roomId));
-                              await batch.commit();
-                              router.back();
-                            } catch (err) { console.error('Decline failed', err); }
-                          }
-                        }
-                      ]);
-                    }}
-                    className="px-6 py-2 rounded-full"
-                    style={{ borderWidth: 1, borderColor: 'rgba(239,68,68,0.4)' }}
-                  >
-                    <Text variant="caption" className="text-red-500 font-sans-semibold">Decline</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={async () => {
-                      try {
-                        await firestore().collection('chatRooms').doc(roomId).update({ status: 'active', requestedBy: null });
-                        setRoomStatus('active');
-                        setRequestedBy(null);
-                      } catch (err) { console.error('Accept failed', err); }
-                    }}
-                    className="px-6 py-2 rounded-full bg-brand-teal"
-                  >
-                    <Text variant="caption" className="text-white font-sans-semibold">Accept</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )
-          )}
-
-          {/* Input area */}
-          <View
-            className="bg-surface dark:bg-surface-dark"
-            style={{ borderTopWidth: 1, borderTopColor: borderColor }}
-          >
-            {replyingTo && (
-              <View className="px-4 py-2 flex-row items-center justify-between bg-surface-soft dark:bg-surface-dark-secondary">
-                <View className="flex-1 border-l-4 border-brand-teal pl-3">
-                  <Text variant="caption" className="font-sans-semibold text-brand-teal">
-                    Replying to {replyingTo.senderId === user?.uid ? 'yourself' : otherUser?.name || 'someone'}
-                  </Text>
-                  <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted" numberOfLines={1}>
-                    {replyingTo.text || (replyingTo.image ? '📷 Image' : '')}
-                  </Text>
-                </View>
-                <TouchableOpacity onPress={() => setReplyingTo(null)} className="p-2">
-                  <X size={16} color="#8E8E93" />
-                </TouchableOpacity>
-              </View>
-            )}
-            <View className="px-4 py-3 flex-row items-center gap-2">
-              <TouchableOpacity
-                onPress={pickImage}
-                disabled={isUploading}
-                className="p-2 rounded-full bg-surface-soft dark:bg-surface-dark-secondary"
-              >
-                {isUploading
-                  ? <ActivityIndicator size="small" color="#14B8A6" />
-                  : <ImageIcon size={20} color="#14B8A6" />
-                }
-              </TouchableOpacity>
-              <View
-                className="flex-1 bg-surface-soft dark:bg-surface-dark-secondary rounded-full px-4 py-2 flex-row items-center"
-                style={{ borderWidth: 1, borderColor }}
-              >
-                <TextInput
-                  value={newMessage}
-                  onChangeText={setNewMessage}
-                  placeholder="Message..."
-                  placeholderTextColor="#8E8E93"
-                  style={{ color: isDark ? '#F5F5F7' : '#1A1A1C' }}
-                  className="flex-1 font-sans py-1"
-                  multiline
-                  maxLength={1000}
-                />
-              </View>
-              <TouchableOpacity
-                onPress={() => handleSend(newMessage)}
-                disabled={!newMessage.trim() || isUploading}
-                className={`p-3 rounded-full ${newMessage.trim() ? 'bg-brand-teal' : 'bg-brand-teal/40'}`}
-              >
-                <Send size={18} color="#FFF" />
-              </TouchableOpacity>
-            </View>
+          </KeyboardAvoidingView>
+        ) : (
+          <View style={{ flex: 1, paddingBottom: keyboardHeight }}>
+            <ChatBody
+              isDark={isDark}
+              roomId={roomId}
+              messages={messages}
+              user={user}
+              otherUser={otherUser}
+              flatListRef={flatListRef}
+              roomStatus={roomStatus}
+              requestedBy={requestedBy}
+              replyingTo={replyingTo}
+              setReplyingTo={setReplyingTo}
+              newMessage={newMessage}
+              setNewMessage={setNewMessage}
+              isUploading={isUploading}
+              handleSend={handleSend}
+              pickImage={pickImage}
+              handleMessageLongPress={handleMessageLongPress}
+              borderColor={borderColor}
+              setRoomStatus={setRoomStatus}
+              setRequestedBy={setRequestedBy}
+            />
           </View>
-        </KeyboardAvoidingView>
+        )}
 
         {/* Forward Modal */}
         <Modal visible={showForwardModal} transparent animationType="slide" onRequestClose={() => setShowForwardModal(false)}>
@@ -629,5 +552,152 @@ export default function ChatRoomScreen() {
 
       </SafeAreaView>
     </GestureHandlerRootView>
+  );
+}
+
+// Extracted inner body to avoid JSX duplication between iOS/Android branches
+function ChatBody({
+  isDark, roomId, messages, user, otherUser, flatListRef,
+  roomStatus, requestedBy, replyingTo, setReplyingTo,
+  newMessage, setNewMessage, isUploading, handleSend, pickImage,
+  handleMessageLongPress, borderColor, setRoomStatus, setRequestedBy,
+}: any) {
+  return (
+    <>
+      <ImageBackground
+        source={isDark
+          ? require('../../../assets/images/chatbackground.png')
+          : require('../../../assets/images/chatbackgroundLight.png')}
+        style={{ flex: 1, width: '100%', height: '100%' }}
+        imageStyle={{ resizeMode: "repeat" }}
+      >
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item: any) => item.id}
+          renderItem={({ item }: any) => (
+            <MessageItem
+              item={item}
+              user={user}
+              isDark={isDark}
+              handleMessageLongPress={handleMessageLongPress}
+              setReplyingTo={setReplyingTo}
+            />
+          )}
+          inverted={true}
+          contentContainerStyle={{ paddingVertical: 16 }}
+        />
+      </ImageBackground>
+
+      {/* Pending Chat Request Banner */}
+      {roomStatus === 'pending' && requestedBy && (
+        requestedBy === user?.uid ? (
+          <View className="px-4 py-3 bg-amber-500/10 items-center justify-center">
+            <Text variant="caption" className="text-amber-600 dark:text-amber-400 font-sans-semibold text-center">
+              ⏳ Chat request pending. They need to accept before you can send more messages.
+            </Text>
+          </View>
+        ) : (
+          <View className="px-4 py-3 bg-brand-teal/10">
+            <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted text-center mb-2">
+              {otherUser?.name || 'Someone'} wants to start a conversation.
+            </Text>
+            <View className="flex-row justify-center gap-3">
+              <TouchableOpacity
+                onPress={() => {
+                  AppAlert.alert('Decline', 'Decline this chat request?', [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Decline', style: 'destructive', onPress: async () => {
+                        try {
+                          const msgsSnap = await firestore().collection('chatRooms').doc(roomId).collection('messages').get();
+                          const batch = firestore().batch();
+                          msgsSnap.docs.forEach((d: any) => batch.delete(d.ref));
+                          batch.delete(firestore().collection('chatRooms').doc(roomId));
+                          await batch.commit();
+                          router.back();
+                        } catch (err) { console.error('Decline failed', err); }
+                      }
+                    }
+                  ]);
+                }}
+                className="px-6 py-2 rounded-full"
+                style={{ borderWidth: 1, borderColor: 'rgba(239,68,68,0.4)' }}
+              >
+                <Text variant="caption" className="text-red-500 font-sans-semibold">Decline</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={async () => {
+                  try {
+                    await firestore().collection('chatRooms').doc(roomId).update({ status: 'active', requestedBy: null });
+                    setRoomStatus('active');
+                    setRequestedBy(null);
+                  } catch (err) { console.error('Accept failed', err); }
+                }}
+                className="px-6 py-2 rounded-full bg-brand-teal"
+              >
+                <Text variant="caption" className="text-white font-sans-semibold">Accept</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )
+      )}
+
+      {/* Input area */}
+      <View
+        className="bg-surface dark:bg-surface-dark"
+        style={{ borderTopWidth: 1, borderTopColor: borderColor }}
+      >
+        {replyingTo && (
+          <View className="px-4 py-2 flex-row items-center justify-between bg-surface-soft dark:bg-surface-dark-secondary">
+            <View className="flex-1 border-l-4 border-brand-teal pl-3">
+              <Text variant="caption" className="font-sans-semibold text-brand-teal">
+                Replying to {replyingTo.senderId === user?.uid ? 'yourself' : otherUser?.name || 'someone'}
+              </Text>
+              <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted" numberOfLines={1}>
+                {replyingTo.text || (replyingTo.image ? '📷 Image' : '')}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setReplyingTo(null)} className="p-2">
+              <X size={16} color="#8E8E93" />
+            </TouchableOpacity>
+          </View>
+        )}
+        <View className="px-4 py-3 flex-row items-center gap-2">
+          <TouchableOpacity
+            onPress={pickImage}
+            disabled={isUploading}
+            className="p-2 rounded-full bg-surface-soft dark:bg-surface-dark-secondary"
+          >
+            {isUploading
+              ? <ActivityIndicator size="small" color="#14B8A6" />
+              : <ImageIcon size={20} color="#14B8A6" />
+            }
+          </TouchableOpacity>
+          <View
+            className="flex-1 bg-surface-soft dark:bg-surface-dark-secondary rounded-full px-4 py-2 flex-row items-center"
+            style={{ borderWidth: 1, borderColor }}
+          >
+            <TextInput
+              value={newMessage}
+              onChangeText={setNewMessage}
+              placeholder="Message..."
+              placeholderTextColor="#8E8E93"
+              style={{ color: isDark ? '#F5F5F7' : '#1A1A1C' }}
+              className="flex-1 font-sans py-1"
+              multiline
+              maxLength={1000}
+            />
+          </View>
+          <TouchableOpacity
+            onPress={() => handleSend(newMessage)}
+            disabled={!newMessage.trim() || isUploading}
+            className={`p-3 rounded-full ${newMessage.trim() ? 'bg-brand-teal' : 'bg-brand-teal/40'}`}
+          >
+            <Send size={18} color="#FFF" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </>
   );
 }
