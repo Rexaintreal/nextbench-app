@@ -34,7 +34,8 @@ export default function FeedScreen() {
 
   const [contentType, setContentType] = useState<'all' | 'posts' | 'marketplace' | 'for-you'>('all');
   const { colorScheme, isDark, toggleTheme } = useTheme();
-
+  const [optimisticUpvotes, setOptimisticUpvotes] = useState<Record<string, { liked: boolean; count: number }>>({});
+  const upvoteSyncRefs = useRef<Record<string, { timer: ReturnType<typeof setTimeout> | null; baseline: boolean }>>({});
   // Realtime feed update tracking
   const flatListRef = useRef<FlatList>(null);
   const [committedFeedItems, setCommittedFeedItems] = useState<FeedItem[]>([]);
@@ -134,7 +135,22 @@ export default function FeedScreen() {
       });
     return () => unsub();
   }, [user]);
-
+  useEffect(() => {
+    setOptimisticUpvotes(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const postId of Object.keys(prev)) {
+        if (upvoteSyncRefs.current[postId]) {
+          upvoteSyncRefs.current[postId].baseline = upvotedPostIds.has(postId);
+        }
+        if (prev[postId].liked === upvotedPostIds.has(postId)) {
+          delete next[postId];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [upvotedPostIds]);
   // Listen to user's wishlists
   useEffect(() => {
     if (!user) return;
@@ -325,9 +341,49 @@ export default function FeedScreen() {
     setTimeout(() => setRefreshing(false), 1000);
   }, [feedItems, pillAnim]);
 
-  const handleUpvote = async (post: Post) => {
+  const handleUpvote = (post: Post) => {
     if (!user) { Alert.alert('Sign In Required', 'You need to sign in to upvote posts.'); return; }
-    try { await toggleUpvote(post.id, user.uid); } catch (err) { console.error('Upvote error:', err); }
+
+    const postId = post.id;
+    const existing = optimisticUpvotes[postId];
+    const baseline = upvotedPostIds.has(postId);
+    const current = existing ? existing.liked : baseline;
+    const next = !current;
+    const baseCount = existing ? existing.count : (post.upvotesCount || 0);
+
+    setOptimisticUpvotes(prev => ({
+      ...prev,
+      [postId]: { liked: next, count: baseCount + (next ? 1 : -1) },
+    }));
+
+    if (!upvoteSyncRefs.current[postId]) {
+      upvoteSyncRefs.current[postId] = { timer: null, baseline };
+    }
+    upvoteSyncRefs.current[postId].baseline = baseline;
+
+    const ref = upvoteSyncRefs.current[postId];
+    if (ref.timer) clearTimeout(ref.timer);
+
+    ref.timer = setTimeout(async () => {
+      if (next === ref.baseline) {
+        setOptimisticUpvotes(prev => {
+          const copy = { ...prev };
+          delete copy[postId];
+          return copy;
+        });
+        return;
+      }
+      try {
+        await toggleUpvote(postId, user.uid);
+      } catch (err) {
+        console.error('Upvote error:', err);
+        setOptimisticUpvotes(prev => {
+          const copy = { ...prev };
+          delete copy[postId];
+          return copy;
+        });
+      }
+    }, 400);
   };
 
   const handleToggleWishlist = async (product: Product) => {
@@ -342,10 +398,14 @@ export default function FeedScreen() {
 
   const renderItem = ({ item }: { item: FeedItem }) => {
     if (item.type === 'post') {
+      const opt = optimisticUpvotes[item.data.id];
+      const displayHasUpvoted = opt ? opt.liked : upvotedPostIds.has(item.data.id);
+      const displayUpvotesCount = opt ? opt.count : (item.data.upvotesCount || 0);
+
       return (
         <PostCard 
-          post={item.data} 
-          hasUpvoted={upvotedPostIds.has(item.data.id)}
+          post={{ ...item.data, upvotesCount: displayUpvotesCount }} 
+          hasUpvoted={displayHasUpvoted}
           isSaved={savedPostIds.has(item.data.id)}
           onPress={() => router.push(`/post/${item.data.id}` as any)}
           onUpvote={() => handleUpvote(item.data)}

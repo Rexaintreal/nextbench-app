@@ -26,7 +26,7 @@ export async function toggleUpvote(
   const existingQuery = await postUpvotesRef
     .where("postId", "==", postId)
     .where("userId", "==", userId)
-    .get({ source: 'server' });
+    .get();
 
   if (!existingQuery.empty) {
     const batch = firestore().batch();

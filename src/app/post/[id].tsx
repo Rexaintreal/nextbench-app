@@ -69,6 +69,12 @@ export default function PostDetailScreen() {
   const [newComment, setNewComment] = useState("");
   const [sending, setSending] = useState(false);
   const [hasUpvoted, setHasUpvoted] = useState(false);
+  const [optimisticUpvote, setOptimisticUpvote] = useState<boolean | null>(null);
+  const [optimisticCount, setOptimisticCount] = useState<number | null>(null);
+  const upvoteSyncRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; baseline: boolean }>({
+    timer: null,
+    baseline: false,
+  });
   const [hasSaved, setHasSaved] = useState(false);
   const [replyingTo, setReplyingTo] = useState<{ id: string; name: string } | null>(null);
 
@@ -134,6 +140,13 @@ export default function PostDetailScreen() {
       .onSnapshot((snap) => setHasUpvoted(snap?.size > 0));
     return () => unsub();
   }, [id, user]);
+  useEffect(() => {
+    upvoteSyncRef.current.baseline = hasUpvoted;
+    if (optimisticUpvote !== null && hasUpvoted === optimisticUpvote) {
+      setOptimisticUpvote(null);
+      setOptimisticCount(null);
+    }
+  }, [hasUpvoted]);
 
   useEffect(() => {
     if (!id || !user) return;
@@ -143,14 +156,33 @@ export default function PostDetailScreen() {
     return () => unsub();
   }, [id, user]);
 
-  const [upvoting, setUpvoting] = useState(false);
+  const handleUpvote = () => {
+    if (!user || !id) return;
 
-  const handleUpvote = async () => {
-    if (!user || !id || upvoting) return;
-    setUpvoting(true);
-    try { await toggleUpvote(id, user.uid); }
-    catch (err) { console.error(err); }
-    finally { setUpvoting(false); }
+    const current = optimisticUpvote ?? hasUpvoted;
+    const next = !current;
+    const baseCount = optimisticCount ?? (post.upvotesCount || 0);
+
+    setOptimisticUpvote(next);
+    setOptimisticCount(baseCount + (next ? 1 : -1));
+
+    if (upvoteSyncRef.current.timer) clearTimeout(upvoteSyncRef.current.timer);
+
+    upvoteSyncRef.current.timer = setTimeout(async () => {
+      const baseline = upvoteSyncRef.current.baseline;
+      if (next === baseline) {
+        setOptimisticUpvote(null);
+        setOptimisticCount(null);
+        return;
+      }
+      try {
+        await toggleUpvote(id, user.uid);
+      } catch (err) {
+        console.error(err);
+        setOptimisticUpvote(null);
+        setOptimisticCount(null);
+      }
+    }, 400);
   };
 
   const handleToggleSave = async () => {
@@ -283,7 +315,8 @@ export default function PostDetailScreen() {
   const isAnonymous = post.type === "confession" && post.isAnonymous;
   const displayName = isAnonymous ? "Anonymous" : post.authorName;
   const postImages = post.imageUrls?.length > 0 ? post.imageUrls : post.imageUrl ? [post.imageUrl] : [];
-
+  const displayLiked = optimisticUpvote ?? hasUpvoted;
+  const displayCount = optimisticCount ?? (post.upvotesCount || 0);
   return (
     <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={["top"]}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1">
@@ -348,9 +381,9 @@ export default function PostDetailScreen() {
             <View className="flex-row items-center justify-between pt-3">
               <View className="flex-row items-center gap-5">
                 <TouchableOpacity onPress={handleUpvote} className="flex-row items-center">
-                  <Heart size={22} color={hasUpvoted ? "#FF375F" : "#8E8E93"} fill={hasUpvoted ? "#FF375F" : "transparent"} />
-                  <Text variant="label" className={`ml-1.5 ${hasUpvoted ? "text-brand-pink" : "text-content-tertiary dark:text-ink-dark-faint"}`}>
-                    {post.upvotesCount || 0}
+                  <Heart size={22} color={displayLiked ? "#FF375F" : "#8E8E93"} fill={displayLiked ? "#FF375F" : "transparent"} />
+                  <Text variant="label" className={`ml-1.5 ${displayLiked ? "text-brand-pink" : "text-content-tertiary dark:text-ink-dark-faint"}`}>
+                    {displayCount}
                   </Text>
                 </TouchableOpacity>
                 <View className="flex-row items-center">
