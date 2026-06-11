@@ -234,10 +234,11 @@ export default function ChatRoomScreen() {
       setReplyingTo(null);
 
       await firestore().collection('chatRooms').doc(roomId).update({
-        lastMessage: image ? '📷 Image' : messageText,
+        lastMessage: image ? 'Image' : messageText,
         lastSenderId: user.uid,
         updatedAt: firestore.FieldValue.serverTimestamp(),
-        unreadBy: otherUser?.id ? [otherUser.id] : []
+        unreadBy: otherUser?.id ? [otherUser.id] : [],
+        deletedBy: []
       });
 
       if (otherUser?.id && otherUser.id !== user.uid) {
