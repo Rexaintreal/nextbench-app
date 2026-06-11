@@ -10,15 +10,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   scheme: "nextbench",
   userInterfaceStyle: "automatic",
 
-  ios: {
-    supportsTablet: false,
-    bundleIdentifier: "in.nextbench.app",
-    googleServicesFile: "./GoogleService-Info.plist",
-    config: {
-      usesNonExemptEncryption: false,
-    },
-  },
-
   android: {
     adaptiveIcon: {
       foregroundImage: "./assets/images/android-icon-foreground.png",
@@ -43,9 +34,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       "expo-build-properties",
       {
-        ios: {
-          useFrameworks: "static",
-          deploymentTarget: "16.4",
+        android: {
+          compileSdkVersion: 35,
+          targetSdkVersion: 35,
+          minSdkVersion: 24,
         },
       },
     ],
@@ -58,7 +50,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         imageWidth: 200,
       },
     ],
-
   ],
 
   experiments: {
@@ -67,7 +58,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
 
   extra: {
     eas: {
-      projectId: "3c26faa6-d133-48db-bda6-91772cb3f9c6", 
+      projectId: "3c26faa6-d133-48db-bda6-91772cb3f9c6",
     },
   },
 });
