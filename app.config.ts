@@ -20,6 +20,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
     package: "in.nextbench.app",
     versionCode: 1,
+    softwareKeyboardLayoutMode: "resize",
   },
 
   web: {

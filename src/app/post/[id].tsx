@@ -10,6 +10,7 @@ import {
   Image,
   TextInput,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ActivityIndicator,
 } from "react-native";
@@ -56,6 +57,7 @@ export default function PostDetailScreen() {
   const { user, userData } = useAuth();
   const { isDark } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
 
   const inputBg        = isDark ? "#2C2C2E" : "#F5F5F7";
   const inputText      = isDark ? "#F5F5F7" : "#1A1A1C";
@@ -77,6 +79,23 @@ export default function PostDetailScreen() {
   });
   const [hasSaved, setHasSaved] = useState(false);
   const [replyingTo, setReplyingTo] = useState<{ id: string; name: string } | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const show = Keyboard.addListener("keyboardDidShow", (e) => {
+      setKeyboardHeight(e.endCoordinates.height + 32);
+    });
+    const hide = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardHeight(0);
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  const handleReply = (replyId: string, name: string) => {
+    setReplyingTo({ id: replyId, name });
+    setTimeout(() => inputRef.current?.focus(), 150);
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -140,6 +159,7 @@ export default function PostDetailScreen() {
       .onSnapshot((snap) => setHasUpvoted(snap?.size > 0));
     return () => unsub();
   }, [id, user]);
+
   useEffect(() => {
     upvoteSyncRef.current.baseline = hasUpvoted;
     if (optimisticUpvote !== null && hasUpvoted === optimisticUpvote) {
@@ -158,16 +178,12 @@ export default function PostDetailScreen() {
 
   const handleUpvote = () => {
     if (!user || !id) return;
-
     const current = optimisticUpvote ?? hasUpvoted;
     const next = !current;
     const baseCount = optimisticCount ?? (post.upvotesCount || 0);
-
     setOptimisticUpvote(next);
     setOptimisticCount(baseCount + (next ? 1 : -1));
-
     if (upvoteSyncRef.current.timer) clearTimeout(upvoteSyncRef.current.timer);
-
     upvoteSyncRef.current.timer = setTimeout(async () => {
       const baseline = upvoteSyncRef.current.baseline;
       if (next === baseline) {
@@ -278,7 +294,7 @@ export default function PostDetailScreen() {
                   {reply.upvotesCount || 0} Likes
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setReplyingTo({ id: reply.id, name: reply.authorName })}>
+              <TouchableOpacity onPress={() => handleReply(reply.id, reply.authorName)}>
                 <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint font-sans-semibold">Reply</Text>
               </TouchableOpacity>
               {(reply.authorId === user?.uid || (userData as any)?.role === "admin") && (
@@ -317,142 +333,154 @@ export default function PostDetailScreen() {
   const postImages = post.imageUrls?.length > 0 ? post.imageUrls : post.imageUrl ? [post.imageUrl] : [];
   const displayLiked = optimisticUpvote ?? hasUpvoted;
   const displayCount = optimisticCount ?? (post.upvotesCount || 0);
-  return (
-    <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={["top"]}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1">
-        {/* Header */}
-        <View className="flex-row items-center px-5 py-3" style={{ borderBottomWidth: 1, borderBottomColor: borderClr }}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} className="mr-4 p-1">
-            <ArrowLeft size={22} color={iconColor} />
-          </TouchableOpacity>
-          <Text variant="h4" className="dark:text-ink-dark">Post</Text>
-        </View>
 
-        <ScrollView ref={scrollRef} className="flex-1" contentContainerStyle={{ paddingBottom: 20 }} keyboardShouldPersistTaps="handled">
-          {/* Post Content */}
-          <View className="px-5 py-5" style={{ borderBottomWidth: 1, borderBottomColor: borderClr }}>
-            {/* Author Row */}
-            <TouchableOpacity
-              className="flex-row items-center mb-4"
-              activeOpacity={isAnonymous ? 1 : 0.7}
-              disabled={isAnonymous}
-              onPress={() => !isAnonymous && router.push(`/profile/${post.authorId}` as any)}
-            >
-              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isAnonymous ? "rgba(147,51,234,0.1)" : inputBg, alignItems: "center", justifyContent: "center", marginRight: 12, overflow: "hidden" }}>
-                {!isAnonymous && post.authorProfilePicture ? (
-                  <Image source={{ uri: post.authorProfilePicture }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
-                ) : (
-                  <Text variant="h4" style={{ color: isAnonymous ? "#A855F7" : isDark ? "#98989D" : "#636366" }}>
-                    {displayName?.[0]?.toUpperCase() || "?"}
-                  </Text>
-                )}
-              </View>
-              <View className="flex-1">
-                <Text variant="label" className="font-sans-semibold dark:text-ink-dark" numberOfLines={1}>{displayName}</Text>
-                <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint mt-0.5">
-                  {post.school}{post.city ? ` · ${post.city}` : ""} · {timeAgo(post.createdAt)}
-                </Text>
-              </View>
-              <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: post.type === "confession" ? "rgba(147,51,234,0.08)" : inputBg }}>
-                <Text variant="caption" style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", textTransform: "capitalize", color: post.type === "confession" ? "#A855F7" : isDark ? "#98989D" : "#636366" }}>
-                  {post.type}
-                </Text>
-              </View>
-            </TouchableOpacity>
+  const inner = (
+    <>
+      {/* Header */}
+      <View className="flex-row items-center px-5 py-3" style={{ borderBottomWidth: 1, borderBottomColor: borderClr }}>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} className="mr-4 p-1">
+          <ArrowLeft size={22} color={iconColor} />
+        </TouchableOpacity>
+        <Text variant="h4" className="dark:text-ink-dark">Post</Text>
+      </View>
 
-            {post.title ? <Text variant="h3" className="mb-3 dark:text-ink-dark">{post.title}</Text> : null}
-
-            <Text variant="body" className="text-content-secondary dark:text-ink-dark-muted leading-[26px] mb-4">
-              {post.content}
-            </Text>
-
-            {postImages.map((url: string, idx: number) => (
-              <View key={idx} style={{ width: "100%", aspectRatio: 4/3, borderRadius: 12, overflow: "hidden", marginBottom: 12, backgroundColor: inputBg }}>
-                <Image source={{ uri: url }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
-              </View>
-            ))}
-
-            {/* Poll */}
-            {post.poll && (
-              <PollDisplay postId={post.id} poll={post.poll} />
-            )}
-
-            {/* Action Bar */}
-            <View className="flex-row items-center justify-between pt-3">
-              <View className="flex-row items-center gap-5">
-                <TouchableOpacity onPress={handleUpvote} className="flex-row items-center">
-                  <Heart size={22} color={displayLiked ? "#FF375F" : "#8E8E93"} fill={displayLiked ? "#FF375F" : "transparent"} />
-                  <Text variant="label" className={`ml-1.5 ${displayLiked ? "text-brand-pink" : "text-content-tertiary dark:text-ink-dark-faint"}`}>
-                    {displayCount}
-                  </Text>
-                </TouchableOpacity>
-                <View className="flex-row items-center">
-                  <MessageCircle size={22} color="#8E8E93" />
-                  <Text variant="label" className="ml-1.5 text-content-tertiary dark:text-ink-dark-faint">{replies.length}</Text>
-                </View>
-                <TouchableOpacity>
-                  <Share2 size={22} color="#8E8E93" />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity onPress={handleToggleSave}>
-                <Bookmark size={22} color={hasSaved ? "#14B8A6" : "#8E8E93"} fill={hasSaved ? "#14B8A6" : "transparent"} />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Comments */}
-          <View className="px-5 pt-4">
-            <Text variant="h4" className="mb-4 dark:text-ink-dark">Comments ({replies.length})</Text>
-            {replies.length === 0 ? (
-              <View className="items-center py-8">
-                <MessageCircle size={32} color={isDark ? "#3A3A3C" : "#E5E5EA"} />
-                <Text variant="bodySmall" className="text-content-tertiary dark:text-ink-dark-faint text-center mt-3">
-                  No comments yet. Be the first!
-                </Text>
-              </View>
-            ) : (
-              (repliesMap["root"] || []).map((reply) => renderCommentNode(reply, 0))
-            )}
-          </View>
-        </ScrollView>
-
-        {/* Input Area */}
-        <View style={{ borderTopWidth: 1, borderTopColor: borderClr }} className="bg-surface dark:bg-surface-dark pb-2">
-          {replyingTo && (
-            <View className="flex-row items-center justify-between px-5 py-2" style={{ backgroundColor: inputBg }}>
-              <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted font-sans-medium">
-                Replying to <Text variant="caption" className="font-sans-semibold text-brand-teal">@{replyingTo.name}</Text>
-              </Text>
-              <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <X size={14} color="#8E8E93" />
-              </TouchableOpacity>
-            </View>
-          )}
-          <View className="flex-row items-center px-5 py-3">
-            <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: inputBg, alignItems: "center", justifyContent: "center", marginRight: 12, overflow: "hidden" }}>
-              {userData?.profilePicture ? (
-                <Image source={{ uri: userData.profilePicture }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+      <ScrollView ref={scrollRef} className="flex-1" contentContainerStyle={{ paddingBottom: 20 }} keyboardShouldPersistTaps="handled">
+        {/* Post Content */}
+        <View className="px-5 py-5" style={{ borderBottomWidth: 1, borderBottomColor: borderClr }}>
+          {/* Author Row */}
+          <TouchableOpacity
+            className="flex-row items-center mb-4"
+            activeOpacity={isAnonymous ? 1 : 0.7}
+            disabled={isAnonymous}
+            onPress={() => !isAnonymous && router.push(`/profile/${post.authorId}` as any)}
+          >
+            <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isAnonymous ? "rgba(147,51,234,0.1)" : inputBg, alignItems: "center", justifyContent: "center", marginRight: 12, overflow: "hidden" }}>
+              {!isAnonymous && post.authorProfilePicture ? (
+                <Image source={{ uri: post.authorProfilePicture }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
               ) : (
-                <Text variant="caption" className="text-content-secondary font-sans-semibold">
-                  {userData?.name?.[0]?.toUpperCase() || "?"}
+                <Text variant="h4" style={{ color: isAnonymous ? "#A855F7" : isDark ? "#98989D" : "#636366" }}>
+                  {displayName?.[0]?.toUpperCase() || "?"}
                 </Text>
               )}
             </View>
-            <TextInput
-              value={newComment}
-              onChangeText={setNewComment}
-              placeholder={replyingTo ? "Write a reply..." : "Write a comment..."}
-              placeholderTextColor={placeholderClr}
-              style={{ flex: 1, height: 40, paddingHorizontal: 16, borderRadius: 999, backgroundColor: inputBg, color: inputText, fontSize: 15 }}
-              returnKeyType="send"
-              onSubmitEditing={handleSendComment}
-            />
-            <TouchableOpacity onPress={handleSendComment} disabled={!newComment.trim() || sending} className="ml-3" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Send size={22} color={newComment.trim() ? "#14B8A6" : "#8E8E93"} />
+            <View className="flex-1">
+              <Text variant="label" className="font-sans-semibold dark:text-ink-dark" numberOfLines={1}>{displayName}</Text>
+              <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint mt-0.5">
+                {post.school}{post.city ? ` · ${post.city}` : ""} · {timeAgo(post.createdAt)}
+              </Text>
+            </View>
+            <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: post.type === "confession" ? "rgba(147,51,234,0.08)" : inputBg }}>
+              <Text variant="caption" style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", textTransform: "capitalize", color: post.type === "confession" ? "#A855F7" : isDark ? "#98989D" : "#636366" }}>
+                {post.type}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {post.title ? <Text variant="h3" className="mb-3 dark:text-ink-dark">{post.title}</Text> : null}
+
+          <Text variant="body" className="text-content-secondary dark:text-ink-dark-muted leading-[26px] mb-4">
+            {post.content}
+          </Text>
+
+          {postImages.map((url: string, idx: number) => (
+            <View key={idx} style={{ width: "100%", aspectRatio: 4/3, borderRadius: 12, overflow: "hidden", marginBottom: 12, backgroundColor: inputBg }}>
+              <Image source={{ uri: url }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
+            </View>
+          ))}
+
+          {/* Poll */}
+          {post.poll && (
+            <PollDisplay postId={post.id} poll={post.poll} />
+          )}
+
+          {/* Action Bar */}
+          <View className="flex-row items-center justify-between pt-3">
+            <View className="flex-row items-center gap-5">
+              <TouchableOpacity onPress={handleUpvote} className="flex-row items-center">
+                <Heart size={22} color={displayLiked ? "#FF375F" : "#8E8E93"} fill={displayLiked ? "#FF375F" : "transparent"} />
+                <Text variant="label" className={`ml-1.5 ${displayLiked ? "text-brand-pink" : "text-content-tertiary dark:text-ink-dark-faint"}`}>
+                  {displayCount}
+                </Text>
+              </TouchableOpacity>
+              <View className="flex-row items-center">
+                <MessageCircle size={22} color="#8E8E93" />
+                <Text variant="label" className="ml-1.5 text-content-tertiary dark:text-ink-dark-faint">{replies.length}</Text>
+              </View>
+              <TouchableOpacity>
+                <Share2 size={22} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={handleToggleSave}>
+              <Bookmark size={22} color={hasSaved ? "#14B8A6" : "#8E8E93"} fill={hasSaved ? "#14B8A6" : "transparent"} />
             </TouchableOpacity>
           </View>
         </View>
-      </KeyboardAvoidingView>
+
+        {/* Comments */}
+        <View className="px-5 pt-4">
+          <Text variant="h4" className="mb-4 dark:text-ink-dark">Comments ({replies.length})</Text>
+          {replies.length === 0 ? (
+            <View className="items-center py-8">
+              <MessageCircle size={32} color={isDark ? "#3A3A3C" : "#E5E5EA"} />
+              <Text variant="bodySmall" className="text-content-tertiary dark:text-ink-dark-faint text-center mt-3">
+                No comments yet. Be the first!
+              </Text>
+            </View>
+          ) : (
+            (repliesMap["root"] || []).map((reply) => renderCommentNode(reply, 0))
+          )}
+        </View>
+      </ScrollView>
+
+      {/* Input Area */}
+      <View style={{ borderTopWidth: 1, borderTopColor: borderClr }} className="bg-surface dark:bg-surface-dark pb-2">
+        {replyingTo && (
+          <View className="flex-row items-center justify-between px-5 py-2" style={{ backgroundColor: inputBg }}>
+            <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted font-sans-medium">
+              Replying to <Text variant="caption" className="font-sans-semibold text-brand-teal">@{replyingTo.name}</Text>
+            </Text>
+            <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <X size={14} color="#8E8E93" />
+            </TouchableOpacity>
+          </View>
+        )}
+        <View className="flex-row items-center px-5 py-3">
+          <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: inputBg, alignItems: "center", justifyContent: "center", marginRight: 12, overflow: "hidden" }}>
+            {userData?.profilePicture ? (
+              <Image source={{ uri: userData.profilePicture }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+            ) : (
+              <Text variant="caption" className="text-content-secondary font-sans-semibold">
+                {userData?.name?.[0]?.toUpperCase() || "?"}
+              </Text>
+            )}
+          </View>
+          <TextInput
+            ref={inputRef}
+            value={newComment}
+            onChangeText={setNewComment}
+            placeholder={replyingTo ? "Write a reply..." : "Write a comment..."}
+            placeholderTextColor={placeholderClr}
+            style={{ flex: 1, height: 40, paddingHorizontal: 16, borderRadius: 999, backgroundColor: inputBg, color: inputText, fontSize: 15 }}
+            returnKeyType="send"
+            onSubmitEditing={handleSendComment}
+          />
+          <TouchableOpacity onPress={handleSendComment} disabled={!newComment.trim() || sending} className="ml-3" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Send size={22} color={newComment.trim() ? "#14B8A6" : "#8E8E93"} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </>
+  );
+
+  return (
+    <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={["top"]}>
+      {Platform.OS === "ios" ? (
+        <KeyboardAvoidingView behavior="padding" className="flex-1">
+          {inner}
+        </KeyboardAvoidingView>
+      ) : (
+        <View style={{ flex: 1, paddingBottom: keyboardHeight }}>{inner}</View>
+      )}
     </SafeAreaView>
   );
 }
