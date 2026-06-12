@@ -1,5 +1,6 @@
 /**
  * Post Detail Screen
+ * — replies now support image attachments (pick from gallery, preview, display inline)
  */
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
@@ -13,17 +14,20 @@ import {
   Keyboard,
   Platform,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
-import { AppAlert } from '@/components/ui/AppAlert';
+import { AppAlert } from "@/components/ui/AppAlert";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTheme } from "@/providers/ThemeProvider";
 import firestore from "@react-native-firebase/firestore";
+import storage from "@react-native-firebase/storage";
+import * as ImagePicker from "expo-image-picker";
 import {
   Heart, MessageCircle, Share2, ArrowLeft,
-  Send, X, Bookmark,
+  Send, X, Bookmark, ImagePlus,
 } from "lucide-react-native";
 import { toggleUpvote, toggleSavePost } from "@/lib/social";
 import PollDisplay from "@/components/ui/PollDisplay";
@@ -34,6 +38,7 @@ interface Reply {
   authorName: string;
   authorProfilePicture?: string | null;
   content: string;
+  imageUrl?: string | null;       // ← new
   parentId?: string | null;
   repliesCount?: number;
   upvotesCount?: number;
@@ -69,6 +74,7 @@ export default function PostDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [replies, setReplies] = useState<Reply[]>([]);
   const [newComment, setNewComment] = useState("");
+  const [selectedImage, setSelectedImage] = useState<string | null>(null); // local URI
   const [sending, setSending] = useState(false);
   const [hasUpvoted, setHasUpvoted] = useState(false);
   const [optimisticUpvote, setOptimisticUpvote] = useState<boolean | null>(null);
@@ -118,10 +124,11 @@ export default function PostDetailScreen() {
           const data = doc.data();
           items.push({
             id: doc.id,
-            authorId: data.authorId || '',
-            authorName: data.authorName || 'Unknown',
+            authorId: data.authorId || "",
+            authorName: data.authorName || "Unknown",
             authorProfilePicture: data.authorProfilePicture || null,
-            content: data.content || '',
+            content: data.content || "",
+            imageUrl: data.imageUrl || null,
             parentId: data.parentId || null,
             repliesCount: data.repliesCount || 0,
             upvotesCount: data.upvotesCount || 0,
@@ -132,13 +139,17 @@ export default function PostDetailScreen() {
         setReplies([...items]);
 
         try {
-          const authorIds = [...new Set(items.map(i => i.authorId).filter(Boolean))];
+          const authorIds = [...new Set(items.map((i) => i.authorId).filter(Boolean))];
           if (authorIds.length > 0) {
-            const userDocs = await Promise.all(authorIds.map(uid => firestore().collection("users").doc(uid).get()));
+            const userDocs = await Promise.all(
+              authorIds.map((uid) => firestore().collection("users").doc(uid).get())
+            );
             const picMap: Record<string, string> = {};
-            userDocs.forEach(u => { if (u.data()?.profilePicture) picMap[u.id] = u.data()!.profilePicture; });
+            userDocs.forEach((u) => {
+              if (u.data()?.profilePicture) picMap[u.id] = u.data()!.profilePicture;
+            });
             let changed = false;
-            const updated = items.map(item => {
+            const updated = items.map((item) => {
               if (picMap[item.authorId] && picMap[item.authorId] !== item.authorProfilePicture) {
                 changed = true;
                 return { ...item, authorProfilePicture: picMap[item.authorId] };
@@ -154,8 +165,10 @@ export default function PostDetailScreen() {
 
   useEffect(() => {
     if (!id || !user) return;
-    const unsub = firestore().collection("post_upvotes")
-      .where("postId", "==", id).where("userId", "==", user.uid)
+    const unsub = firestore()
+      .collection("post_upvotes")
+      .where("postId", "==", id)
+      .where("userId", "==", user.uid)
       .onSnapshot((snap) => setHasUpvoted(snap?.size > 0));
     return () => unsub();
   }, [id, user]);
@@ -170,8 +183,10 @@ export default function PostDetailScreen() {
 
   useEffect(() => {
     if (!id || !user) return;
-    const unsub = firestore().collection("saved_posts")
-      .where("postId", "==", id).where("userId", "==", user.uid)
+    const unsub = firestore()
+      .collection("saved_posts")
+      .where("postId", "==", id)
+      .where("userId", "==", user.uid)
       .onSnapshot((snap) => setHasSaved(snap?.size > 0));
     return () => unsub();
   }, [id, user]);
@@ -206,10 +221,44 @@ export default function PostDetailScreen() {
     try { await toggleSavePost(id, user.uid); } catch (err) { console.error(err); }
   };
 
+  // ─── Image picker ────────────────────────────────────────────────────────────
+  const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Allow photo access to attach images.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      allowsEditing: true,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setSelectedImage(result.assets[0].uri);
+    }
+  };
+
+  // Upload local URI → Firebase Storage, return download URL
+  const uploadImage = async (localUri: string): Promise<string> => {
+    const filename = `reply_images/${user!.uid}_${Date.now()}.jpg`;
+    const ref = storage().ref(filename);
+    await ref.putFile(localUri);
+    return ref.getDownloadURL();
+  };
+  // ─────────────────────────────────────────────────────────────────────────────
+
   const handleSendComment = async () => {
-    if (!newComment.trim() || !user || !userData || !id) return;
+    const hasText = newComment.trim().length > 0;
+    const hasImage = !!selectedImage;
+    if ((!hasText && !hasImage) || !user || !userData || !id) return;
+
     setSending(true);
     try {
+      let imageUrl: string | null = null;
+      if (selectedImage) {
+        imageUrl = await uploadImage(selectedImage);
+      }
+
       const replyData: any = {
         postId: id,
         authorId: user.uid,
@@ -217,33 +266,53 @@ export default function PostDetailScreen() {
         authorSchool: userData.school || "",
         authorProfilePicture: userData.profilePicture || null,
         content: newComment.trim(),
+        imageUrl: imageUrl,
         upvotesCount: 0,
         repliesCount: 0,
         createdAt: firestore.FieldValue.serverTimestamp(),
         updatedAt: firestore.FieldValue.serverTimestamp(),
       };
       if (replyingTo) replyData.parentId = replyingTo.id;
+
       await firestore().collection("post_replies").add(replyData);
-      await firestore().collection("posts").doc(id).update({ repliesCount: firestore.FieldValue.increment(1) });
+      await firestore().collection("posts").doc(id).update({
+        repliesCount: firestore.FieldValue.increment(1),
+      });
       if (replyingTo) {
-        await firestore().collection("post_replies").doc(replyingTo.id).update({ repliesCount: firestore.FieldValue.increment(1) });
+        await firestore().collection("post_replies").doc(replyingTo.id).update({
+          repliesCount: firestore.FieldValue.increment(1),
+        });
       }
+
       setNewComment("");
+      setSelectedImage(null);
       setReplyingTo(null);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
-    } catch (err) { console.error("Comment error:", err); }
-    finally { setSending(false); }
+    } catch (err) {
+      console.error("Comment error:", err);
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleDeleteComment = (replyId: string) => {
     AppAlert.alert("Delete Comment", "Are you sure?", [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => {
-        try {
-          await firestore().collection("post_replies").doc(replyId).delete();
-          if (post) await firestore().collection("posts").doc(post.id).update({ repliesCount: firestore.FieldValue.increment(-1) });
-        } catch (err) { console.error(err); }
-      }},
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await firestore().collection("post_replies").doc(replyId).delete();
+            if (post)
+              await firestore().collection("posts").doc(post.id).update({
+                repliesCount: firestore.FieldValue.increment(-1),
+              });
+          } catch (err) {
+            console.error(err);
+          }
+        },
+      },
     ]);
   };
 
@@ -265,29 +334,80 @@ export default function PostDetailScreen() {
         <View className="flex-row">
           <TouchableOpacity onPress={() => router.push(`/profile/${reply.authorId}` as any)}>
             <View
-              style={{ width: isIndented ? 28 : 36, height: isIndented ? 28 : 36, borderRadius: 99, backgroundColor: inputBg, alignItems: "center", justifyContent: "center", marginRight: 12, overflow: "hidden" }}
+              style={{
+                width: isIndented ? 28 : 36,
+                height: isIndented ? 28 : 36,
+                borderRadius: 99,
+                backgroundColor: inputBg,
+                alignItems: "center",
+                justifyContent: "center",
+                marginRight: 12,
+                overflow: "hidden",
+              }}
             >
               {reply.authorProfilePicture ? (
-                <Image source={{ uri: reply.authorProfilePicture }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+                <Image
+                  source={{ uri: reply.authorProfilePicture }}
+                  style={{ width: "100%", height: "100%" }}
+                  resizeMode="cover"
+                />
               ) : (
-                <Text variant="caption" className="text-content-secondary font-sans-semibold" style={{ fontSize: isIndented ? 12 : 14 }}>
+                <Text
+                  variant="caption"
+                  className="text-content-secondary font-sans-semibold"
+                  style={{ fontSize: isIndented ? 12 : 14 }}
+                >
                   {reply.authorName?.[0]?.toUpperCase() || "?"}
                 </Text>
               )}
             </View>
           </TouchableOpacity>
+
           <View className="flex-1">
             <View className="flex-row items-center mb-1">
-              <Text variant="label" className="font-sans-semibold dark:text-ink-dark mr-2" style={{ fontSize: isIndented ? 13 : 14 }}>
+              <Text
+                variant="label"
+                className="font-sans-semibold dark:text-ink-dark mr-2"
+                style={{ fontSize: isIndented ? 13 : 14 }}
+              >
                 {reply.authorName}
               </Text>
               <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint">
                 {timeAgo(reply.createdAt)}
               </Text>
             </View>
-            <Text variant="body" className="text-content-secondary dark:text-ink-dark-muted leading-[22px]" style={{ fontSize: isIndented ? 14 : 15 }}>
-              {reply.content}
-            </Text>
+
+            {/* Comment text */}
+            {reply.content ? (
+              <Text
+                variant="body"
+                className="text-content-secondary dark:text-ink-dark-muted leading-[22px]"
+                style={{ fontSize: isIndented ? 14 : 15 }}
+              >
+                {reply.content}
+              </Text>
+            ) : null}
+
+            {/* Comment image */}
+            {reply.imageUrl ? (
+              <View
+                style={{
+                  marginTop: 8,
+                  borderRadius: 12,
+                  overflow: "hidden",
+                  width: "100%",
+                  aspectRatio: 4 / 3,
+                  backgroundColor: inputBg,
+                }}
+              >
+                <Image
+                  source={{ uri: reply.imageUrl }}
+                  style={{ width: "100%", height: "100%" }}
+                  resizeMode="cover"
+                />
+              </View>
+            ) : null}
+
             <View className="flex-row items-center gap-4 mt-1.5">
               <TouchableOpacity>
                 <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint font-sans-semibold">
@@ -295,11 +415,15 @@ export default function PostDetailScreen() {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => handleReply(reply.id, reply.authorName)}>
-                <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint font-sans-semibold">Reply</Text>
+                <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint font-sans-semibold">
+                  Reply
+                </Text>
               </TouchableOpacity>
               {(reply.authorId === user?.uid || (userData as any)?.role === "admin") && (
                 <TouchableOpacity onPress={() => handleDeleteComment(reply.id)}>
-                  <Text variant="caption" className="text-error font-sans-semibold">Delete</Text>
+                  <Text variant="caption" className="text-error font-sans-semibold">
+                    Delete
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -323,28 +447,46 @@ export default function PostDetailScreen() {
   if (!post) {
     return (
       <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark items-center justify-center">
-        <Text variant="body" className="text-content-secondary">Post not found</Text>
+        <Text variant="body" className="text-content-secondary">
+          Post not found
+        </Text>
       </SafeAreaView>
     );
   }
 
   const isAnonymous = post.type === "confession" && post.isAnonymous;
   const displayName = isAnonymous ? "Anonymous" : post.authorName;
-  const postImages = post.imageUrls?.length > 0 ? post.imageUrls : post.imageUrl ? [post.imageUrl] : [];
+  const postImages =
+    post.imageUrls?.length > 0 ? post.imageUrls : post.imageUrl ? [post.imageUrl] : [];
   const displayLiked = optimisticUpvote ?? hasUpvoted;
   const displayCount = optimisticCount ?? (post.upvotesCount || 0);
+  const canSend = (newComment.trim().length > 0 || !!selectedImage) && !sending;
 
   const inner = (
     <>
       {/* Header */}
-      <View className="flex-row items-center px-5 py-3" style={{ borderBottomWidth: 1, borderBottomColor: borderClr }}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} className="mr-4 p-1">
+      <View
+        className="flex-row items-center px-5 py-3"
+        style={{ borderBottomWidth: 1, borderBottomColor: borderClr }}
+      >
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          className="mr-4 p-1"
+        >
           <ArrowLeft size={22} color={iconColor} />
         </TouchableOpacity>
-        <Text variant="h4" className="dark:text-ink-dark">Post</Text>
+        <Text variant="h4" className="dark:text-ink-dark">
+          Post
+        </Text>
       </View>
 
-      <ScrollView ref={scrollRef} className="flex-1" contentContainerStyle={{ paddingBottom: 20 }} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        ref={scrollRef}
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 20 }}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Post Content */}
         <View className="px-5 py-5" style={{ borderBottomWidth: 1, borderBottomColor: borderClr }}>
           {/* Author Row */}
@@ -354,75 +496,167 @@ export default function PostDetailScreen() {
             disabled={isAnonymous}
             onPress={() => !isAnonymous && router.push(`/profile/${post.authorId}` as any)}
           >
-            <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isAnonymous ? "rgba(147,51,234,0.1)" : inputBg, alignItems: "center", justifyContent: "center", marginRight: 12, overflow: "hidden" }}>
+            <View
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: isAnonymous ? "rgba(147,51,234,0.1)" : inputBg,
+                alignItems: "center",
+                justifyContent: "center",
+                marginRight: 12,
+                overflow: "hidden",
+              }}
+            >
               {!isAnonymous && post.authorProfilePicture ? (
-                <Image source={{ uri: post.authorProfilePicture }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+                <Image
+                  source={{ uri: post.authorProfilePicture }}
+                  style={{ width: "100%", height: "100%" }}
+                  resizeMode="cover"
+                />
               ) : (
-                <Text variant="h4" style={{ color: isAnonymous ? "#A855F7" : isDark ? "#98989D" : "#636366" }}>
+                <Text
+                  variant="h4"
+                  style={{ color: isAnonymous ? "#A855F7" : isDark ? "#98989D" : "#636366" }}
+                >
                   {displayName?.[0]?.toUpperCase() || "?"}
                 </Text>
               )}
             </View>
             <View className="flex-1">
-              <Text variant="label" className="font-sans-semibold dark:text-ink-dark" numberOfLines={1}>{displayName}</Text>
-              <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint mt-0.5">
-                {post.school}{post.city ? ` · ${post.city}` : ""} · {timeAgo(post.createdAt)}
+              <Text
+                variant="label"
+                className="font-sans-semibold dark:text-ink-dark"
+                numberOfLines={1}
+              >
+                {displayName}
+              </Text>
+              <Text
+                variant="caption"
+                className="text-content-tertiary dark:text-ink-dark-faint mt-0.5"
+              >
+                {post.school}
+                {post.city ? ` · ${post.city}` : ""} · {timeAgo(post.createdAt)}
               </Text>
             </View>
-            <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: post.type === "confession" ? "rgba(147,51,234,0.08)" : inputBg }}>
-              <Text variant="caption" style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", textTransform: "capitalize", color: post.type === "confession" ? "#A855F7" : isDark ? "#98989D" : "#636366" }}>
+            <View
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                borderRadius: 6,
+                backgroundColor:
+                  post.type === "confession" ? "rgba(147,51,234,0.08)" : inputBg,
+              }}
+            >
+              <Text
+                variant="caption"
+                style={{
+                  fontSize: 11,
+                  fontFamily: "Inter_600SemiBold",
+                  textTransform: "capitalize",
+                  color:
+                    post.type === "confession"
+                      ? "#A855F7"
+                      : isDark
+                      ? "#98989D"
+                      : "#636366",
+                }}
+              >
                 {post.type}
               </Text>
             </View>
           </TouchableOpacity>
 
-          {post.title ? <Text variant="h3" className="mb-3 dark:text-ink-dark">{post.title}</Text> : null}
+          {post.title ? (
+            <Text variant="h3" className="mb-3 dark:text-ink-dark">
+              {post.title}
+            </Text>
+          ) : null}
 
-          <Text variant="body" className="text-content-secondary dark:text-ink-dark-muted leading-[26px] mb-4">
+          <Text
+            variant="body"
+            className="text-content-secondary dark:text-ink-dark-muted leading-[26px] mb-4"
+          >
             {post.content}
           </Text>
 
           {postImages.map((url: string, idx: number) => (
-            <View key={idx} style={{ width: "100%", aspectRatio: 4/3, borderRadius: 12, overflow: "hidden", marginBottom: 12, backgroundColor: inputBg }}>
-              <Image source={{ uri: url }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
+            <View
+              key={idx}
+              style={{
+                width: "100%",
+                aspectRatio: 4 / 3,
+                borderRadius: 12,
+                overflow: "hidden",
+                marginBottom: 12,
+                backgroundColor: inputBg,
+              }}
+            >
+              <Image
+                source={{ uri: url }}
+                style={{ width: "100%", height: "100%" }}
+                resizeMode="contain"
+              />
             </View>
           ))}
 
-          {/* Poll */}
-          {post.poll && (
-            <PollDisplay postId={post.id} poll={post.poll} />
-          )}
+          {post.poll && <PollDisplay postId={post.id} poll={post.poll} />}
 
           {/* Action Bar */}
           <View className="flex-row items-center justify-between pt-3">
             <View className="flex-row items-center gap-5">
               <TouchableOpacity onPress={handleUpvote} className="flex-row items-center">
-                <Heart size={22} color={displayLiked ? "#FF375F" : "#8E8E93"} fill={displayLiked ? "#FF375F" : "transparent"} />
-                <Text variant="label" className={`ml-1.5 ${displayLiked ? "text-brand-pink" : "text-content-tertiary dark:text-ink-dark-faint"}`}>
+                <Heart
+                  size={22}
+                  color={displayLiked ? "#FF375F" : "#8E8E93"}
+                  fill={displayLiked ? "#FF375F" : "transparent"}
+                />
+                <Text
+                  variant="label"
+                  className={`ml-1.5 ${
+                    displayLiked
+                      ? "text-brand-pink"
+                      : "text-content-tertiary dark:text-ink-dark-faint"
+                  }`}
+                >
                   {displayCount}
                 </Text>
               </TouchableOpacity>
               <View className="flex-row items-center">
                 <MessageCircle size={22} color="#8E8E93" />
-                <Text variant="label" className="ml-1.5 text-content-tertiary dark:text-ink-dark-faint">{replies.length}</Text>
+                <Text
+                  variant="label"
+                  className="ml-1.5 text-content-tertiary dark:text-ink-dark-faint"
+                >
+                  {replies.length}
+                </Text>
               </View>
               <TouchableOpacity>
                 <Share2 size={22} color="#8E8E93" />
               </TouchableOpacity>
             </View>
             <TouchableOpacity onPress={handleToggleSave}>
-              <Bookmark size={22} color={hasSaved ? "#14B8A6" : "#8E8E93"} fill={hasSaved ? "#14B8A6" : "transparent"} />
+              <Bookmark
+                size={22}
+                color={hasSaved ? "#14B8A6" : "#8E8E93"}
+                fill={hasSaved ? "#14B8A6" : "transparent"}
+              />
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Comments */}
         <View className="px-5 pt-4">
-          <Text variant="h4" className="mb-4 dark:text-ink-dark">Comments ({replies.length})</Text>
+          <Text variant="h4" className="mb-4 dark:text-ink-dark">
+            Comments ({replies.length})
+          </Text>
           {replies.length === 0 ? (
             <View className="items-center py-8">
               <MessageCircle size={32} color={isDark ? "#3A3A3C" : "#E5E5EA"} />
-              <Text variant="bodySmall" className="text-content-tertiary dark:text-ink-dark-faint text-center mt-3">
+              <Text
+                variant="bodySmall"
+                className="text-content-tertiary dark:text-ink-dark-faint text-center mt-3"
+              >
                 No comments yet. Be the first!
               </Text>
             </View>
@@ -433,39 +667,137 @@ export default function PostDetailScreen() {
       </ScrollView>
 
       {/* Input Area */}
-      <View style={{ borderTopWidth: 1, borderTopColor: borderClr }} className="bg-surface dark:bg-surface-dark pb-2">
+      <View
+        style={{ borderTopWidth: 1, borderTopColor: borderClr }}
+        className="bg-surface dark:bg-surface-dark pb-2"
+      >
+        {/* Replying-to banner */}
         {replyingTo && (
-          <View className="flex-row items-center justify-between px-5 py-2" style={{ backgroundColor: inputBg }}>
-            <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted font-sans-medium">
-              Replying to <Text variant="caption" className="font-sans-semibold text-brand-teal">@{replyingTo.name}</Text>
+          <View
+            className="flex-row items-center justify-between px-5 py-2"
+            style={{ backgroundColor: inputBg }}
+          >
+            <Text
+              variant="caption"
+              className="text-content-secondary dark:text-ink-dark-muted font-sans-medium"
+            >
+              Replying to{" "}
+              <Text variant="caption" className="font-sans-semibold text-brand-teal">
+                @{replyingTo.name}
+              </Text>
             </Text>
-            <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity
+              onPress={() => setReplyingTo(null)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
               <X size={14} color="#8E8E93" />
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Selected image preview */}
+        {selectedImage && (
+          <View style={{ paddingHorizontal: 20, paddingTop: 10 }}>
+            <View
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 10,
+                overflow: "hidden",
+                backgroundColor: inputBg,
+              }}
+            >
+              <Image
+                source={{ uri: selectedImage }}
+                style={{ width: "100%", height: "100%" }}
+                resizeMode="cover"
+              />
+              <TouchableOpacity
+                onPress={() => setSelectedImage(null)}
+                style={{
+                  position: "absolute",
+                  top: 4,
+                  right: 4,
+                  backgroundColor: "rgba(0,0,0,0.55)",
+                  borderRadius: 999,
+                  padding: 3,
+                }}
+              >
+                <X size={12} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Text row */}
         <View className="flex-row items-center px-5 py-3">
-          <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: inputBg, alignItems: "center", justifyContent: "center", marginRight: 12, overflow: "hidden" }}>
+          {/* User avatar */}
+          <View
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              backgroundColor: inputBg,
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: 10,
+              overflow: "hidden",
+            }}
+          >
             {userData?.profilePicture ? (
-              <Image source={{ uri: userData.profilePicture }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+              <Image
+                source={{ uri: userData.profilePicture }}
+                style={{ width: "100%", height: "100%" }}
+                resizeMode="cover"
+              />
             ) : (
               <Text variant="caption" className="text-content-secondary font-sans-semibold">
                 {userData?.name?.[0]?.toUpperCase() || "?"}
               </Text>
             )}
           </View>
+
+          {/* Image attach button */}
+          <TouchableOpacity
+            onPress={handlePickImage}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={{ marginRight: 10 }}
+          >
+            <ImagePlus size={22} color={selectedImage ? "#14B8A6" : "#8E8E93"} />
+          </TouchableOpacity>
+
+          {/* Text input */}
           <TextInput
             ref={inputRef}
             value={newComment}
             onChangeText={setNewComment}
             placeholder={replyingTo ? "Write a reply..." : "Write a comment..."}
             placeholderTextColor={placeholderClr}
-            style={{ flex: 1, height: 40, paddingHorizontal: 16, borderRadius: 999, backgroundColor: inputBg, color: inputText, fontSize: 15 }}
+            style={{
+              flex: 1,
+              height: 40,
+              paddingHorizontal: 16,
+              borderRadius: 999,
+              backgroundColor: inputBg,
+              color: inputText,
+              fontSize: 15,
+            }}
             returnKeyType="send"
             onSubmitEditing={handleSendComment}
           />
-          <TouchableOpacity onPress={handleSendComment} disabled={!newComment.trim() || sending} className="ml-3" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Send size={22} color={newComment.trim() ? "#14B8A6" : "#8E8E93"} />
+
+          {/* Send button */}
+          <TouchableOpacity
+            onPress={handleSendComment}
+            disabled={!canSend}
+            className="ml-3"
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            {sending ? (
+              <ActivityIndicator size="small" color="#14B8A6" />
+            ) : (
+              <Send size={22} color={canSend ? "#14B8A6" : "#8E8E93"} />
+            )}
           </TouchableOpacity>
         </View>
       </View>
