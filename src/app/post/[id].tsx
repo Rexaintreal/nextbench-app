@@ -1,6 +1,7 @@
 /**
  * Post Detail Screen
  * — replies now support image attachments (pick from gallery, preview, display inline)
+ * — comments/replies now support likes (togglable, optimistic UI)
  */
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
@@ -38,7 +39,7 @@ interface Reply {
   authorName: string;
   authorProfilePicture?: string | null;
   content: string;
-  imageUrl?: string | null;       // ← new
+  imageUrl?: string | null;
   parentId?: string | null;
   repliesCount?: number;
   upvotesCount?: number;
@@ -55,6 +56,32 @@ function timeAgo(date: any): string {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
   return date.toDate().toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// Toggle a reply upvote in the reply_upvotes collection
+// and increment/decrement the reply's upvotesCount field
+async function toggleReplyUpvote(replyId: string, userId: string) {
+  const col = firestore().collection("reply_upvotes");
+  const snap = await col
+    .where("replyId", "==", replyId)
+    .where("userId", "==", userId)
+    .get();
+
+  const replyRef = firestore().collection("post_replies").doc(replyId);
+
+  if (snap.size > 0) {
+    // Already upvoted → remove
+    await Promise.all(snap.docs.map((d) => d.ref.delete()));
+    await replyRef.update({
+      upvotesCount: firestore.FieldValue.increment(-1),
+    });
+  } else {
+    // Not yet upvoted → add
+    await col.add({ replyId, userId, createdAt: firestore.FieldValue.serverTimestamp() });
+    await replyRef.update({
+      upvotesCount: firestore.FieldValue.increment(1),
+    });
+  }
 }
 
 export default function PostDetailScreen() {
@@ -74,8 +101,10 @@ export default function PostDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [replies, setReplies] = useState<Reply[]>([]);
   const [newComment, setNewComment] = useState("");
-  const [selectedImage, setSelectedImage] = useState<string | null>(null); // local URI
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+
+  // Post-level upvote state
   const [hasUpvoted, setHasUpvoted] = useState(false);
   const [optimisticUpvote, setOptimisticUpvote] = useState<boolean | null>(null);
   const [optimisticCount, setOptimisticCount] = useState<number | null>(null);
@@ -83,6 +112,18 @@ export default function PostDetailScreen() {
     timer: null,
     baseline: false,
   });
+
+  // Reply-level upvote state
+  // upvotedReplyIds: set of replyIds the current user has upvoted (from Firestore)
+  const [upvotedReplyIds, setUpvotedReplyIds] = useState<Set<string>>(new Set());
+  // optimisticReplyUpvotes: { [replyId]: { liked: boolean; count: number } }
+  const [optimisticReplyUpvotes, setOptimisticReplyUpvotes] = useState<
+    Record<string, { liked: boolean; count: number }>
+  >({});
+  const replyUpvoteSyncRefs = useRef<
+    Record<string, { timer: ReturnType<typeof setTimeout> | null; baseline: boolean }>
+  >({});
+
   const [hasSaved, setHasSaved] = useState(false);
   const [replyingTo, setReplyingTo] = useState<{ id: string; name: string } | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -103,6 +144,7 @@ export default function PostDetailScreen() {
     setTimeout(() => inputRef.current?.focus(), 150);
   };
 
+  // Listen to post doc
   useEffect(() => {
     if (!id) return;
     const unsub = firestore().collection("posts").doc(id).onSnapshot((doc) => {
@@ -112,6 +154,7 @@ export default function PostDetailScreen() {
     return () => unsub();
   }, [id]);
 
+  // Listen to replies
   useEffect(() => {
     if (!id) return;
     const unsub = firestore()
@@ -163,6 +206,7 @@ export default function PostDetailScreen() {
     return () => unsub();
   }, [id]);
 
+  // Listen to post upvotes for current user
   useEffect(() => {
     if (!id || !user) return;
     const unsub = firestore()
@@ -181,6 +225,40 @@ export default function PostDetailScreen() {
     }
   }, [hasUpvoted]);
 
+  // Listen to reply upvotes for current user
+  useEffect(() => {
+    if (!id || !user) return;
+    const unsub = firestore()
+      .collection("reply_upvotes")
+      .where("userId", "==", user.uid)
+      .onSnapshot((snap) => {
+        if (!snap) return;
+        const ids = new Set<string>();
+        snap.forEach((d) => ids.add(d.data().replyId));
+        setUpvotedReplyIds(ids);
+      });
+    return () => unsub();
+  }, [id, user]);
+
+  // Sync optimistic reply upvotes when Firestore confirms
+  useEffect(() => {
+    setOptimisticReplyUpvotes((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const replyId of Object.keys(prev)) {
+        if (replyUpvoteSyncRefs.current[replyId]) {
+          replyUpvoteSyncRefs.current[replyId].baseline = upvotedReplyIds.has(replyId);
+        }
+        if (prev[replyId].liked === upvotedReplyIds.has(replyId)) {
+          delete next[replyId];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [upvotedReplyIds]);
+
+  // Listen to saved posts
   useEffect(() => {
     if (!id || !user) return;
     const unsub = firestore()
@@ -191,6 +269,7 @@ export default function PostDetailScreen() {
     return () => unsub();
   }, [id, user]);
 
+  // Post upvote handler (unchanged)
   const handleUpvote = () => {
     if (!user || !id) return;
     const current = optimisticUpvote ?? hasUpvoted;
@@ -216,12 +295,57 @@ export default function PostDetailScreen() {
     }, 400);
   };
 
+  // Reply upvote handler (new)
+  const handleReplyUpvote = (reply: Reply) => {
+    if (!user) return;
+    const replyId = reply.id;
+    const existing = optimisticReplyUpvotes[replyId];
+    const baseline = upvotedReplyIds.has(replyId);
+    const current = existing ? existing.liked : baseline;
+    const next = !current;
+    const baseCount = existing ? existing.count : (reply.upvotesCount || 0);
+
+    setOptimisticReplyUpvotes((prev) => ({
+      ...prev,
+      [replyId]: { liked: next, count: baseCount + (next ? 1 : -1) },
+    }));
+
+    if (!replyUpvoteSyncRefs.current[replyId]) {
+      replyUpvoteSyncRefs.current[replyId] = { timer: null, baseline };
+    }
+    replyUpvoteSyncRefs.current[replyId].baseline = baseline;
+
+    const ref = replyUpvoteSyncRefs.current[replyId];
+    if (ref.timer) clearTimeout(ref.timer);
+
+    ref.timer = setTimeout(async () => {
+      if (next === ref.baseline) {
+        setOptimisticReplyUpvotes((prev) => {
+          const copy = { ...prev };
+          delete copy[replyId];
+          return copy;
+        });
+        return;
+      }
+      try {
+        await toggleReplyUpvote(replyId, user.uid);
+      } catch (err) {
+        console.error("Reply upvote error:", err);
+        setOptimisticReplyUpvotes((prev) => {
+          const copy = { ...prev };
+          delete copy[replyId];
+          return copy;
+        });
+      }
+    }, 400);
+  };
+
   const handleToggleSave = async () => {
     if (!user || !id) return;
     try { await toggleSavePost(id, user.uid); } catch (err) { console.error(err); }
   };
 
-  // ─── Image picker ────────────────────────────────────────────────────────────
+  // Image picker
   const handlePickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
@@ -238,14 +362,12 @@ export default function PostDetailScreen() {
     }
   };
 
-  // Upload local URI → Firebase Storage, return download URL
   const uploadImage = async (localUri: string): Promise<string> => {
     const filename = `reply_images/${user!.uid}_${Date.now()}.jpg`;
     const ref = storage().ref(filename);
     await ref.putFile(localUri);
     return ref.getDownloadURL();
   };
-  // ─────────────────────────────────────────────────────────────────────────────
 
   const handleSendComment = async () => {
     const hasText = newComment.trim().length > 0;
@@ -329,6 +451,12 @@ export default function PostDetailScreen() {
   const renderCommentNode = (reply: Reply, level = 0) => {
     const children = repliesMap[reply.id] || [];
     const isIndented = level > 0;
+
+    // Resolve optimistic like state for this reply
+    const opt = optimisticReplyUpvotes[reply.id];
+    const isLiked = opt ? opt.liked : upvotedReplyIds.has(reply.id);
+    const likeCount = opt ? opt.count : (reply.upvotesCount || 0);
+
     return (
       <View key={reply.id} className={`mb-4 ${isIndented ? "ml-10 mt-1" : ""}`}>
         <View className="flex-row">
@@ -408,17 +536,38 @@ export default function PostDetailScreen() {
               </View>
             ) : null}
 
+            {/* Action row */}
             <View className="flex-row items-center gap-4 mt-1.5">
-              <TouchableOpacity>
-                <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint font-sans-semibold">
-                  {reply.upvotesCount || 0} Likes
+              {/* Like button — now wired up */}
+              <TouchableOpacity
+                onPress={() => handleReplyUpvote(reply)}
+                className="flex-row items-center gap-1"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Heart
+                  size={14}
+                  color={isLiked ? "#FF375F" : isDark ? "#636366" : "#8E8E93"}
+                  fill={isLiked ? "#FF375F" : "transparent"}
+                />
+                <Text
+                  variant="caption"
+                  style={{
+                    fontFamily: "Inter_600SemiBold",
+                    color: isLiked
+                      ? "#FF375F"
+                      : isDark ? "#636366" : "#8E8E93",
+                  }}
+                >
+                  {likeCount > 0 ? likeCount : "Like"}
                 </Text>
               </TouchableOpacity>
+
               <TouchableOpacity onPress={() => handleReply(reply.id, reply.authorName)}>
                 <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint font-sans-semibold">
                   Reply
                 </Text>
               </TouchableOpacity>
+
               {(reply.authorId === user?.uid || (userData as any)?.role === "admin") && (
                 <TouchableOpacity onPress={() => handleDeleteComment(reply.id)}>
                   <Text variant="caption" className="text-error font-sans-semibold">
@@ -429,6 +578,7 @@ export default function PostDetailScreen() {
             </View>
           </View>
         </View>
+
         {children.length > 0 && (
           <View className="mt-3">{children.map((c) => renderCommentNode(c, level + 1))}</View>
         )}
