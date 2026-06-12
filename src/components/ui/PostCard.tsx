@@ -2,8 +2,10 @@ import React from 'react';
 import { View, TouchableOpacity, Image } from 'react-native';
 import { router } from 'expo-router';
 import { Text } from '@/components/ui/Text';
-import { Heart, MessageCircle, Share2, Bookmark, Flame, ThumbsDown, Flag } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, Bookmark, Flame } from 'lucide-react-native';
 import PollDisplay from '@/components/ui/PollDisplay';
+import { ImageSlider } from '@/components/ui/ImageSlider';
+import { useTheme } from '@/providers/ThemeProvider';
 
 export interface Post {
   id: string;
@@ -52,10 +54,12 @@ function timeAgo(date: any): string {
 }
 
 export default function PostCard({ post, hasUpvoted, isSaved, onPress, onUpvote, onToggleSave, onAuthorPress }: PostCardProps) {
+  const { isDark } = useTheme();
+  const inputBg = isDark ? '#2C2C2E' : '#F5F5F7';
+
   const postImageUrls = post.imageUrls && post.imageUrls.length > 0
     ? post.imageUrls
     : (post.imageUrl ? [post.imageUrl] : []);
-  const hasImage = postImageUrls.length > 0;
 
   const isAnonymous = post.type === 'confession' && post.isAnonymous;
   const displayName = isAnonymous ? 'Anonymous' : post.authorName;
@@ -63,143 +67,127 @@ export default function PostCard({ post, hasUpvoted, isSaved, onPress, onUpvote,
 
   return (
     <View className="bg-surface dark:bg-surface-dark">
-    <TouchableOpacity
-      activeOpacity={0.92}
-      onPress={onPress}
-      className="px-5 py-5">
-
-      {/* Author Row */}
       <TouchableOpacity
-        className="flex-row items-center mb-3"
-        activeOpacity={isAnonymous ? 1 : 0.7}
-        disabled={isAnonymous || !onAuthorPress}
-        onPress={onAuthorPress}
-      >
-        <View
-          className={`w-10 h-10 rounded-full items-center justify-center mr-3 overflow-hidden ${
-            isAnonymous ? 'bg-purple-100 dark:bg-purple-900/30' : 'bg-surface-soft dark:bg-surface-dark-secondary'
-          }`}
+        activeOpacity={0.92}
+        onPress={onPress}
+        className="px-5 py-5">
+
+        {/* Author Row */}
+        <TouchableOpacity
+          className="flex-row items-center mb-3"
+          activeOpacity={isAnonymous ? 1 : 0.7}
+          disabled={isAnonymous || !onAuthorPress}
+          onPress={onAuthorPress}
         >
-          {!isAnonymous && post.authorProfilePicture ? (
-            <Image
-              source={{ uri: post.authorProfilePicture || '' }}
-              className="w-full h-full rounded-full"
-            />
-          ) : (
-            <Text
-              variant="label"
-              className={`font-sans-semibold ${isAnonymous ? 'text-purple-500' : 'text-content-secondary'}`}
-            >
-              {avatarText}
-            </Text>
-          )}
-        </View>
-        <View className="flex-1">
-          <View className="flex-row items-center">
-            <Text variant="label" className="font-sans-semibold mr-1.5" numberOfLines={1}>
-              {displayName}
-            </Text>
-            <Text variant="caption" className="text-content-tertiary">
-              · {timeAgo(post.createdAt)}
-            </Text>
+          <View
+            className={`w-10 h-10 rounded-full items-center justify-center mr-3 overflow-hidden ${
+              isAnonymous ? 'bg-purple-100 dark:bg-purple-900/30' : 'bg-surface-soft dark:bg-surface-dark-secondary'
+            }`}
+          >
+            {!isAnonymous && post.authorProfilePicture ? (
+              <Image
+                source={{ uri: post.authorProfilePicture || '' }}
+                className="w-full h-full rounded-full"
+              />
+            ) : (
+              <Text
+                variant="label"
+                className={`font-sans-semibold ${isAnonymous ? 'text-purple-500' : 'text-content-secondary'}`}
+              >
+                {avatarText}
+              </Text>
+            )}
           </View>
-          <Text variant="caption" className="text-content-tertiary mt-0.5" numberOfLines={1}>
-            {post.school}{post.city ? ` · ${post.city}` : ''}
-          </Text>
-        </View>
-        <View className="flex-row items-center gap-1.5">
-          <View className={`px-2 py-1 rounded-md ${
-            post.type === 'confession' 
-              ? 'bg-purple-50 dark:bg-purple-900/20' 
-              : 'bg-surface-soft dark:bg-surface-dark-secondary'
-          }`}>
-            <Text variant="caption" className={`text-[11px] font-sans-semibold capitalize ${
-              post.type === 'confession' ? 'text-purple-500' : 'text-content-secondary'
-            }`}>
-              {post.type}
-            </Text>
-          </View>
-          {post.feedScore && post.feedScore > 10 ? (
-            <View className="bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded-md flex-row items-center">
-              <Flame size={11} color="#f59e0b" />
-              <Text variant="caption" className="text-amber-500 text-[11px] font-sans-semibold ml-0.5">
-                Hot
+          <View className="flex-1">
+            <View className="flex-row items-center">
+              <Text variant="label" className="font-sans-semibold mr-1.5" numberOfLines={1}>
+                {displayName}
+              </Text>
+              <Text variant="caption" className="text-content-tertiary">
+                · {timeAgo(post.createdAt)}
               </Text>
             </View>
-          ) : null}
+            <Text variant="caption" className="text-content-tertiary mt-0.5" numberOfLines={1}>
+              {post.school}{post.city ? ` · ${post.city}` : ''}
+            </Text>
+          </View>
+          <View className="flex-row items-center gap-1.5">
+            <View className={`px-2 py-1 rounded-md ${
+              post.type === 'confession'
+                ? 'bg-purple-50 dark:bg-purple-900/20'
+                : 'bg-surface-soft dark:bg-surface-dark-secondary'
+            }`}>
+              <Text variant="caption" className={`text-[11px] font-sans-semibold capitalize ${
+                post.type === 'confession' ? 'text-purple-500' : 'text-content-secondary'
+              }`}>
+                {post.type}
+              </Text>
+            </View>
+            {post.feedScore && post.feedScore > 10 ? (
+              <View className="bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded-md flex-row items-center">
+                <Flame size={11} color="#f59e0b" />
+                <Text variant="caption" className="text-amber-500 text-[11px] font-sans-semibold ml-0.5">
+                  Hot
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </TouchableOpacity>
+
+        {/* Title */}
+        {post.title ? (
+          <Text variant="h4" className="mb-2">
+            {post.title}
+          </Text>
+        ) : null}
+
+        {/* Content */}
+        <Text variant="body" className="text-content-secondary dark:text-content-dark-secondary leading-[24px] mb-3" numberOfLines={5}>
+          {post.content}
+        </Text>
+
+        {/* Image slider */}
+        <ImageSlider urls={postImageUrls} inputBg={inputBg} isDark={isDark} />
+
+        {/* Poll */}
+        {post.poll && (
+          <PollDisplay postId={post.id} poll={post.poll} compact />
+        )}
+
+        {/* Actions */}
+        <View className="flex-row items-center justify-between pt-2">
+          <View className="flex-row items-center gap-5">
+            <TouchableOpacity
+              onPress={onUpvote}
+              className="flex-row items-center"
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Heart size={20} color={hasUpvoted ? '#FF375F' : '#8E8E93'} fill={hasUpvoted ? '#FF375F' : 'transparent'} />
+              <Text variant="caption" className={`ml-1.5 font-sans-medium ${hasUpvoted ? 'text-brand-pink' : 'text-content-tertiary'}`}>
+                {post.upvotesCount || 0}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity className="flex-row items-center" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} onPress={onPress}>
+              <MessageCircle size={20} color="#8E8E93" />
+              <Text variant="caption" className="ml-1.5 text-content-tertiary font-sans-medium">
+                {post.repliesCount || 0}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Share2 size={20} color="#8E8E93" />
+            </TouchableOpacity>
+          </View>
+          <View className="flex-row items-center gap-4">
+            <TouchableOpacity
+              onPress={onToggleSave}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Bookmark size={20} color={isSaved ? '#0071E3' : '#8E8E93'} fill={isSaved ? '#0071E3' : 'transparent'} />
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
-
-      {/* Title */}
-      {post.title ? (
-        <Text variant="h4" className="mb-2">
-          {post.title}
-        </Text>
-      ) : null}
-
-      {/* Content */}
-      <Text variant="body" className="text-content-secondary dark:text-content-dark-secondary leading-[24px] mb-3" numberOfLines={5}>
-        {post.content}
-      </Text>
-
-      {/* Image */}
-      {hasImage && (
-        <View className="w-full aspect-[4/3] rounded-xl overflow-hidden mb-3 bg-surface-soft dark:bg-surface-dark-secondary">
-          <Image
-            source={{ uri: postImageUrls[0] || '' }}
-            className="w-full h-full"
-            resizeMode="contain"
-          />
-          {postImageUrls.length > 1 && (
-            <View className="absolute bottom-2 right-2 bg-black/60 px-2 py-0.5 rounded-md">
-              <Text variant="caption" className="text-white text-[11px] font-sans-semibold">
-                +{postImageUrls.length - 1}
-              </Text>
-            </View>
-          )}
-        </View>
-      )}
-
-      {/* Poll */}
-      {post.poll && (
-        <PollDisplay postId={post.id} poll={post.poll} compact />
-      )}
-
-      {/* Actions */}
-      <View className="flex-row items-center justify-between pt-2">
-        <View className="flex-row items-center gap-5">
-          <TouchableOpacity
-            onPress={onUpvote}
-            className="flex-row items-center"
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Heart size={20} color={hasUpvoted ? '#FF375F' : '#8E8E93'} fill={hasUpvoted ? '#FF375F' : 'transparent'} />
-            <Text variant="caption" className={`ml-1.5 font-sans-medium ${hasUpvoted ? 'text-brand-pink' : 'text-content-tertiary'}`}>
-              {post.upvotesCount || 0}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity className="flex-row items-center" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} onPress={onPress}>
-            <MessageCircle size={20} color="#8E8E93" />
-            <Text variant="caption" className="ml-1.5 text-content-tertiary font-sans-medium">
-              {post.repliesCount || 0}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Share2 size={20} color="#8E8E93" />
-          </TouchableOpacity>
-        </View>
-        <View className="flex-row items-center gap-4">
-          <TouchableOpacity 
-            onPress={onToggleSave}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Bookmark size={20} color={isSaved ? '#0071E3' : '#8E8E93'} fill={isSaved ? '#0071E3' : 'transparent'} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    </TouchableOpacity>
-    {/* Card separator */}
-    <View className="h-[0.5px] bg-border dark:bg-border mx-5" style={{ backgroundColor: 'rgba(0,0,0,0.06)' }} />
+      <View className="h-[0.5px] bg-border dark:bg-border mx-5" style={{ backgroundColor: 'rgba(0,0,0,0.06)' }} />
     </View>
   );
 }

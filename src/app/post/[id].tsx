@@ -26,6 +26,7 @@ import { useTheme } from "@/providers/ThemeProvider";
 import firestore from "@react-native-firebase/firestore";
 import storage from "@react-native-firebase/storage";
 import * as ImagePicker from "expo-image-picker";
+import { ImageSlider } from "@/components/ui/ImageSlider";
 import {
   Heart, MessageCircle, Share2, ArrowLeft,
   Send, X, Bookmark, ImagePlus,
@@ -729,26 +730,7 @@ export default function PostDetailScreen() {
           >
             {post.content}
           </Text>
-
-          {postImages.map((url: string, idx: number) => (
-            <View
-              key={idx}
-              style={{
-                width: "100%",
-                aspectRatio: 4 / 3,
-                borderRadius: 12,
-                overflow: "hidden",
-                marginBottom: 12,
-                backgroundColor: inputBg,
-              }}
-            >
-              <Image
-                source={{ uri: url }}
-                style={{ width: "100%", height: "100%" }}
-                resizeMode="contain"
-              />
-            </View>
-          ))}
+          <ImageSlider urls={postImages} inputBg={inputBg} isDark={isDark} />
 
           {post.poll && <PollDisplay postId={post.id} poll={post.poll} />}
 
