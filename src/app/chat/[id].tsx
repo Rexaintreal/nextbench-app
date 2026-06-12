@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
-import { ArrowLeft, Send, Image as ImageIcon, User, X, Reply, MoreVertical } from "lucide-react-native";
+import { ArrowLeft, Send, Image as ImageIcon, User, X, Reply, MoreVertical, ZoomIn } from "lucide-react-native";
 import { blockUser, unblockUser, useBlockStatus } from "@/lib/blocks";
 import firestore from "@react-native-firebase/firestore";
 import { uploadChatImageMobile } from '@/services/firebase/storage';
@@ -31,7 +31,7 @@ interface Message {
   };
 }
 
-const MessageItem = ({ item, user, isDark, handleMessageLongPress, setReplyingTo }: any) => {
+const MessageItem = ({ item, user, isDark, handleMessageLongPress, setReplyingTo, onImagePress }: any) => {
   const swipeableRef = useRef<any>(null);
   const isMe = item.senderId === user?.uid;
   const isDeleted = item.isDeletedForEveryone;
@@ -90,7 +90,12 @@ const MessageItem = ({ item, user, isDark, handleMessageLongPress, setReplyingTo
                 </View>
               )}
               {item.image && (
-                <Image source={{ uri: item.image }} className="w-48 h-48 rounded-lg mb-2" resizeMode="cover" />
+                <TouchableOpacity onPress={() => onImagePress?.(item.image)} activeOpacity={0.9}>
+                  <Image source={{ uri: item.image }} className="w-48 h-48 rounded-lg mb-2" resizeMode="cover" />
+                  <View style={{ position: 'absolute', bottom: 10, right: 6, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 12, padding: 4 }}>
+                    <ZoomIn size={14} color="#fff" />
+                  </View>
+                </TouchableOpacity>
               )}
               {item.text && (
                 <Text variant="body" className={`${isMe ? 'text-white' : 'text-content dark:text-ink-dark'}`}>
@@ -121,6 +126,7 @@ export default function ChatRoomScreen() {
   const [otherUser, setOtherUser] = useState<any>(null);
 
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [forwardChats, setForwardChats] = useState<any[]>([]);
@@ -509,6 +515,7 @@ export default function ChatRoomScreen() {
               borderColor={borderColor}
               setRoomStatus={setRoomStatus}
               setRequestedBy={setRequestedBy}
+              onImagePress={setPreviewImage}
             />
           </KeyboardAvoidingView>
         ) : (
@@ -533,9 +540,36 @@ export default function ChatRoomScreen() {
               borderColor={borderColor}
               setRoomStatus={setRoomStatus}
               setRequestedBy={setRequestedBy}
+              onImagePress={setPreviewImage}
             />
           </View>
         )}
+
+        {/* Image Preview Modal */}
+        <Modal
+          visible={!!previewImage}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPreviewImage(null)}
+          statusBarTranslucent
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' }}>
+            <TouchableOpacity
+              onPress={() => setPreviewImage(null)}
+              style={{ position: 'absolute', top: 52, right: 20, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, padding: 8 }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <X size={22} color="#fff" />
+            </TouchableOpacity>
+            {previewImage && (
+              <Image
+                source={{ uri: previewImage }}
+                style={{ width: '100%', height: '80%' }}
+                resizeMode="contain"
+              />
+            )}
+          </View>
+        </Modal>
 
         {/* Forward Modal */}
         <Modal visible={showForwardModal} transparent animationType="slide" onRequestClose={() => setShowForwardModal(false)}>
@@ -590,6 +624,7 @@ function ChatBody({
   roomStatus, requestedBy, replyingTo, setReplyingTo,
   newMessage, setNewMessage, isUploading, handleSend, pickImage,
   handleMessageLongPress, borderColor, setRoomStatus, setRequestedBy,
+  onImagePress,
 }: any) {
   return (
     <>
@@ -611,6 +646,7 @@ function ChatBody({
               isDark={isDark}
               handleMessageLongPress={handleMessageLongPress}
               setReplyingTo={setReplyingTo}
+              onImagePress={onImagePress}
             />
           )}
           inverted={true}
