@@ -41,3 +41,37 @@ export async function uploadChatImageMobile(localUri: string, roomId: string): P
     xhr.send(formData);
   });
 }
+
+export async function uploadCoverPhotoMobile(localUri: string, uid: string): Promise<string> {
+  if (!CLOUD_NAME || !UPLOAD_PRESET) throw new Error("Cloudinary env vars missing.");
+
+  const filename = localUri.split("/").pop() || "cover.jpg";
+  const match = /\.(\w+)$/.exec(filename);
+  const type = match ? `image/${match[1]}` : "image/jpeg";
+
+  const formData = new FormData();
+  formData.append("file", { uri: localUri, name: filename, type } as any);
+  formData.append("upload_preset", UPLOAD_PRESET);
+  formData.append("folder", `nextbench/covers/${uid}`);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`);
+    xhr.onload = () => {
+      console.log("Cover upload status:", xhr.status);
+      console.log("Cover upload response:", xhr.responseText);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try { resolve(JSON.parse(xhr.responseText).secure_url); }
+        catch { reject(new Error("Failed to parse Cloudinary response")); }
+      } else {
+        try { reject(new Error(JSON.parse(xhr.responseText).error?.message || "Upload failed")); }
+        catch { reject(new Error(`Upload failed with status ${xhr.status}`)); }
+      }
+    };
+    xhr.onerror = (e) => {
+      console.log("Cover upload XHR error:", e);
+      reject(new Error("Network error during upload"));
+    };
+    xhr.send(formData);
+  });
+}

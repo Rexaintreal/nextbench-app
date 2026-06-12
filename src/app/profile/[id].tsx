@@ -1,5 +1,6 @@
 /**
  * Other User Profile Screen
+ * — Cover photo: displayed for all users, editable on own profile
  */
 
 import React, { useState, useEffect } from "react";
@@ -11,35 +12,40 @@ import {
   ActivityIndicator,
   ActionSheetIOS,
   Platform,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTheme } from "@/providers/ThemeProvider";
-import { AppAlert } from '@/components/ui/AppAlert';
+import { AppAlert } from "@/components/ui/AppAlert";
 import {
   ChevronLeft, ShieldCheck, MapPin, Grid,
   MessageSquare, MoreHorizontal, UserPlus,
-  UserMinus, Ban,
+  UserMinus, Ban, Camera,
 } from "lucide-react-native";
 import firestore from "@react-native-firebase/firestore";
+import * as ImagePicker from "expo-image-picker";
 import ProductCard, { Product } from "@/components/ui/ProductCard";
 import PostCard, { Post } from "@/components/ui/PostCard";
 import { useFollowStatus, useFollowCounts, followUser, unfollowUser } from "@/lib/follows";
 import { useBlockStatus, blockUser, unblockUser } from "@/lib/blocks";
 import { getOrCreateDMRoom } from "@/lib/social";
 import ReportModal from "@/components/ui/ReportModal";
+import { uploadCoverPhotoMobile } from "@/services/firebase/storage";
+
+const COVER_HEIGHT = 160;
 
 export default function OtherProfileScreen() {
   const { id: profileId } = useLocalSearchParams<{ id: string }>();
   const { user, userData: myData } = useAuth();
   const { isDark } = useTheme();
 
-  // Theme-aware icon colour — replaces every hardcoded "#1D1D1F"
   const iconColor   = isDark ? "#F5F5F7" : "#1D1D1F";
   const borderColor = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
-  const headerBg    = isDark ? "rgba(0,0,0,0.88)"       : "rgba(255,255,255,0.9)";
+  const headerBg    = isDark ? "rgba(0,0,0,0.88)" : "rgba(255,255,255,0.9)";
+  const surfaceBg   = isDark ? "#1C1C1E" : "#FFFFFF";
 
   const [profileData, setProfileData] = useState<any>(null);
   const [loading, setLoading]         = useState(true);
@@ -50,9 +56,14 @@ export default function OtherProfileScreen() {
   const [loadingPosts, setLoadingPosts]       = useState(true);
   const [showReportModal, setShowReportModal] = useState(false);
 
+  // Cover photo state
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
+
   const { isFollowing, isFollowedBy, isFriend } = useFollowStatus(profileId);
   const { followersCount, followingCount }       = useFollowCounts(profileId);
   const { isBlocked, isBlockedBy }               = useBlockStatus(profileId);
+
+  const isOwnProfile = user?.uid === profileId;
 
   useEffect(() => {
     if (!profileId) return;
@@ -85,6 +96,41 @@ export default function OtherProfileScreen() {
     return () => unsub();
   }, [profileId]);
 
+  // ── Cover photo upload ───────────────────────────────────────────────────────
+  const handleEditCover = async () => {
+    if (!isOwnProfile || !user) return;
+
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Allow photo access to change your cover photo.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+      allowsEditing: true,
+      aspect: [3, 1],
+    });
+
+    if (result.canceled || !result.assets[0]) return;
+
+    setIsUploadingCover(true);
+    try {
+      const url = await uploadCoverPhotoMobile(result.assets[0].uri, user.uid);
+      await firestore().collection("users").doc(user.uid).update({
+        coverPhoto: url,
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (err) {
+      console.error("Cover upload error:", err);
+      Alert.alert("Upload failed", "Could not update cover photo. Please try again.");
+    } finally {
+      setIsUploadingCover(false);
+    }
+  };
+
+  // ── Follow / Message / Block ──────────────────────────────────────────────
   const handleToggleFollow = async () => {
     if (!user || !profileId) return;
     if (!myData?.verified) {
@@ -114,7 +160,9 @@ export default function OtherProfileScreen() {
         : `Block ${profileData?.name}? They won't be able to see your content.`,
       [
         { text: "Cancel", style: "cancel" },
-        { text: isBlocked ? "Unblock" : "Block", style: isBlocked ? "default" : "destructive",
+        {
+          text: isBlocked ? "Unblock" : "Block",
+          style: isBlocked ? "default" : "destructive",
           onPress: async () => {
             try {
               if (isBlocked) await unblockUser(user.uid, profileId);
@@ -132,7 +180,11 @@ export default function OtherProfileScreen() {
   const showActions = () => {
     if (Platform.OS === "ios") {
       ActionSheetIOS.showActionSheetWithOptions(
-        { options: ["Cancel", isBlocked ? "Unblock User" : "Block User", "Report User"], destructiveButtonIndex: 1, cancelButtonIndex: 0 },
+        {
+          options: ["Cancel", isBlocked ? "Unblock User" : "Block User", "Report User"],
+          destructiveButtonIndex: 1,
+          cancelButtonIndex: 0,
+        },
         (i) => { if (i === 1) handleBlock(); if (i === 2) setShowReportModal(true); }
       );
     } else {
@@ -144,7 +196,7 @@ export default function OtherProfileScreen() {
     }
   };
 
-  // ── Loading ──────────────────────────────────────────────────────────────
+  // ── Guard states ─────────────────────────────────────────────────────────
   if (loading) {
     return (
       <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark items-center justify-center">
@@ -153,7 +205,6 @@ export default function OtherProfileScreen() {
     );
   }
 
-  // ── Not found ────────────────────────────────────────────────────────────
   if (!profileData) {
     return (
       <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark items-center justify-center">
@@ -167,11 +218,9 @@ export default function OtherProfileScreen() {
     );
   }
 
-  // ── Blocked by this user ─────────────────────────────────────────────────
   if (isBlockedBy) {
     return (
       <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={["top"]}>
-        {/* Header */}
         <View
           className="px-5 py-3 flex-row items-center"
           style={{ borderBottomWidth: 1, borderBottomColor: borderColor, backgroundColor: headerBg }}
@@ -192,15 +241,19 @@ export default function OtherProfileScreen() {
     );
   }
 
-  const isOwnProfile = user?.uid === profileId;
-  const nameInitial  = profileData.name?.[0]?.toUpperCase() || "?";
+  const nameInitial = profileData.name?.[0]?.toUpperCase() || "?";
 
   return (
     <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={["top"]}>
-      {/* ── Header ── */}
+      {/* ── Floating header (back + name + more) ── */}
       <View
         className="px-5 py-3 flex-row items-center justify-between"
-        style={{ borderBottomWidth: 1, borderBottomColor: borderColor, backgroundColor: headerBg }}
+        style={{
+          borderBottomWidth: 1,
+          borderBottomColor: borderColor,
+          backgroundColor: headerBg,
+          zIndex: 10,
+        }}
       >
         <View className="flex-row items-center">
           <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2 mr-2">
@@ -217,139 +270,296 @@ export default function OtherProfileScreen() {
         )}
       </View>
 
-      <ScrollView className="flex-1 bg-surface dark:bg-surface-dark" contentContainerStyle={{ paddingBottom: 100 }}>
-        {/* ── Profile Info ── */}
-        <View className="px-6 py-8 items-center bg-surface dark:bg-surface-dark" style={{ borderBottomWidth: 1, borderBottomColor: borderColor }}>
-          {/* Avatar */}
-          <View className="relative mb-4">
-            <View className="w-24 h-24 rounded-full bg-brand-teal/10 items-center justify-center overflow-hidden border border-brand-teal/20">
-              {profileData.profilePicture ? (
-                <Image source={{ uri: profileData.profilePicture }} className="w-full h-full" resizeMode="cover" />
+      <ScrollView
+        className="flex-1 bg-surface dark:bg-surface-dark"
+        contentContainerStyle={{ paddingBottom: 100 }}
+      >
+        {/* ── Cover Photo ── */}
+        <TouchableOpacity
+          activeOpacity={isOwnProfile ? 0.85 : 1}
+          onPress={isOwnProfile ? handleEditCover : undefined}
+          style={{ height: COVER_HEIGHT, width: "100%", position: "relative" }}
+        >
+          {profileData.coverPhoto ? (
+            <Image
+              source={{ uri: profileData.coverPhoto }}
+              style={{ width: "100%", height: "100%" }}
+              resizeMode="cover"
+            />
+          ) : (
+            <View
+              style={{
+                width: "100%",
+                height: "100%",
+                backgroundColor: isDark ? "#0D3D38" : "#CCFBF1",
+              }}
+            >
+              <View
+                style={{
+                  position: "absolute",
+                  right: 0,
+                  top: 0,
+                  width: "55%",
+                  height: "100%",
+                  backgroundColor: isDark
+                    ? "rgba(244,63,94,0.18)"
+                    : "rgba(244,63,94,0.12)",
+                }}
+              />
+            </View>
+          )}
+
+          <View
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 60,
+              backgroundColor: "transparent",
+            }}
+            pointerEvents="none"
+          />
+
+          {/* Edit cover button — own profile only */}
+          {isOwnProfile && (
+            <View
+              style={{
+                position: "absolute",
+                bottom: 10,
+                right: 12,
+                backgroundColor: "rgba(0,0,0,0.52)",
+                borderRadius: 999,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              {isUploadingCover ? (
+                <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text variant="h1" className="text-brand-teal">{nameInitial}</Text>
+                <Camera size={14} color="#fff" />
+              )}
+              <Text style={{ color: "#fff", fontSize: 11, fontFamily: "Inter_600SemiBold", letterSpacing: 0.5 }}>
+                {isUploadingCover ? "Uploading…" : "Edit Cover"}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        {/* ── Profile Info (avatar overlaps cover) ── */}
+        <View style={{ backgroundColor: surfaceBg }}>
+          {/* Avatar row — pulled up to overlap the cover */}
+          <View
+            style={{
+              paddingHorizontal: 20,
+              marginTop: -38,
+              flexDirection: "row",
+              alignItems: "flex-end",
+              justifyContent: "space-between",
+              marginBottom: 12,
+            }}
+          >
+            {/* Avatar */}
+            <View
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 40,
+                borderWidth: 3,
+                borderColor: surfaceBg,
+                overflow: "hidden",
+                backgroundColor: isDark ? "#2C2C2E" : "#F5F5F7",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {profileData.profilePicture ? (
+                <Image
+                  source={{ uri: profileData.profilePicture }}
+                  style={{ width: "100%", height: "100%" }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text variant="h2" className="text-brand-teal">{nameInitial}</Text>
+              )}
+              {profileData.verified && (
+                <View
+                  style={{
+                    position: "absolute",
+                    bottom: 2,
+                    right: 2,
+                    backgroundColor: "#14B8A6",
+                    borderRadius: 999,
+                    padding: 3,
+                    borderWidth: 2,
+                    borderColor: surfaceBg,
+                  }}
+                >
+                  <ShieldCheck size={10} color="#FFF" />
+                </View>
               )}
             </View>
-            {profileData.verified && (
-              <View className="absolute bottom-0 right-0 bg-brand-teal rounded-full p-1 border-2 border-surface dark:border-surface-dark">
-                <ShieldCheck size={14} color="#FFF" />
+
+            {/* Action buttons — shown next to avatar for non-own profiles */}
+            {!isOwnProfile && !isBlocked && (
+              <View className="flex-row gap-2" style={{ paddingBottom: 4 }}>
+                <TouchableOpacity
+                  onPress={handleToggleFollow}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 999,
+                    backgroundColor: isFollowing ? "transparent" : "#14B8A6",
+                    borderWidth: isFollowing ? 1 : 0,
+                    borderColor: borderColor,
+                  }}
+                >
+                  {isFollowing
+                    ? <UserMinus size={14} color="#8E8E93" />
+                    : <UserPlus size={14} color="#FFF" />
+                  }
+                  <Text
+                    variant="caption"
+                    style={{
+                      fontFamily: "Inter_600SemiBold",
+                      fontSize: 12,
+                      color: isFollowing ? (isDark ? "#8E8E93" : "#636366") : "#FFF",
+                    }}
+                  >
+                    {isFollowing ? "Unfollow" : "Follow"}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleMessage}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 999,
+                    borderWidth: 1,
+                    borderColor: borderColor,
+                    backgroundColor: isDark ? "#2C2C2E" : "#F5F5F7",
+                  }}
+                >
+                  <MessageSquare size={14} color="#14B8A6" />
+                  <Text
+                    variant="caption"
+                    style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#14B8A6" }}
+                  >
+                    Message
+                  </Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
 
-          <Text variant="h2" className="mb-0.5 dark:text-ink-dark">{profileData.name}</Text>
-          {profileData.username && (
-            <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint mb-1">
-              @{profileData.username}
-            </Text>
-          )}
-          <View className="flex-row items-center mb-3">
-            <MapPin size={14} color={isDark ? "#636366" : "#8E8E93"} />
-            <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted ml-1">
-              {profileData.school}{profileData.city ? ` • ${profileData.city}` : ""}
-            </Text>
-          </View>
-
-          {/* Relationship badge */}
-          {!isOwnProfile && (
-            <View className="flex-row items-center gap-1 mb-3">
-              {isFriend && (
-                <View className="bg-green-500/10 px-3 py-1 rounded-full">
-                  <Text variant="caption" className="text-green-500 text-[10px] font-sans-semibold uppercase tracking-widest">
-                    🤝 Friends
-                  </Text>
-                </View>
-              )}
-              {isFollowedBy && !isFriend && (
-                <View className="bg-brand-teal/10 px-3 py-1 rounded-full">
-                  <Text variant="caption" className="text-brand-teal text-[10px] font-sans-semibold uppercase tracking-widest">
-                    Follows you
-                  </Text>
-                </View>
+          {/* Name, username, school */}
+          <View style={{ paddingHorizontal: 20, paddingBottom: 16 }}>
+            <View className="flex-row items-center gap-2 mb-0.5">
+              <Text variant="h2" className="dark:text-ink-dark">{profileData.name}</Text>
+              {profileData.verified && (
+                <ShieldCheck size={16} color="#14B8A6" />
               )}
             </View>
-          )}
 
-          {/* Stats */}
-          <View className="flex-row gap-6 mb-4">
-            {[
-              { label: "Followers", value: followersCount },
-              { label: "Following", value: followingCount },
-              { label: "Listings",  value: listings.length },
-            ].map(({ label, value }) => (
-              <View key={label} className="items-center">
-                <Text variant="h3" className="dark:text-ink-dark">{value}</Text>
-                <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted">{label}</Text>
+            {profileData.username && (
+              <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint mb-1">
+                @{profileData.username}
+              </Text>
+            )}
+
+            <View className="flex-row items-center mb-3">
+              <MapPin size={13} color={isDark ? "#636366" : "#8E8E93"} />
+              <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted ml-1">
+                {profileData.school}{profileData.city ? ` • ${profileData.city}` : ""}
+              </Text>
+            </View>
+
+            {/* Relationship badge */}
+            {!isOwnProfile && (isFriend || isFollowedBy) && (
+              <View className="flex-row items-center gap-2 mb-3">
+                {isFriend && (
+                  <View className="bg-green-500/10 px-3 py-1 rounded-full">
+                    <Text variant="caption" className="text-green-500 text-[10px] font-sans-semibold uppercase tracking-widest">
+                      🤝 Friends
+                    </Text>
+                  </View>
+                )}
+                {isFollowedBy && !isFriend && (
+                  <View className="bg-brand-teal/10 px-3 py-1 rounded-full">
+                    <Text variant="caption" className="text-brand-teal text-[10px] font-sans-semibold uppercase tracking-widest">
+                      Follows you
+                    </Text>
+                  </View>
+                )}
               </View>
-            ))}
+            )}
+
+            {/* Stats */}
+            <View className="flex-row gap-6">
+              {[
+                { label: "Followers", value: followersCount },
+                { label: "Following", value: followingCount },
+                { label: "Listings",  value: listings.length },
+              ].map(({ label, value }) => (
+                <View key={label} className="items-center">
+                  <Text variant="h3" className="dark:text-ink-dark">{value}</Text>
+                  <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted">{label}</Text>
+                </View>
+              ))}
+            </View>
           </View>
-
-          {/* Action Buttons */}
-          {!isOwnProfile && !isBlocked && (
-            <View className="flex-row gap-3 w-full px-4">
-              <TouchableOpacity
-                onPress={handleToggleFollow}
-                className={`flex-1 py-3 rounded-xl items-center flex-row justify-center gap-2 ${
-                  isFollowing ? "bg-surface-soft dark:bg-surface-dark-elevated" : "bg-brand-teal"
-                }`}
-                style={isFollowing ? { borderWidth: 1, borderColor: borderColor } : undefined}
-              >
-                {isFollowing
-                  ? <UserMinus size={16} color={isDark ? "#8E8E93" : "#8E8E93"} />
-                  : <UserPlus size={16} color="#FFF" />
-                }
-                <Text
-                  variant="label"
-                  className={`font-sans-semibold text-[11px] uppercase tracking-widest ${
-                    isFollowing ? "text-content-secondary dark:text-ink-dark-muted" : "text-white"
-                  }`}
-                >
-                  {isFollowing ? "Unfollow" : "Follow"}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={handleMessage}
-                className="flex-1 py-3 rounded-xl items-center flex-row justify-center gap-2 bg-surface-soft dark:bg-surface-dark-elevated"
-                style={{ borderWidth: 1, borderColor: borderColor }}
-              >
-                <MessageSquare size={16} color="#14B8A6" />
-                <Text variant="label" className="font-sans-semibold text-brand-teal text-[11px] uppercase tracking-widest">
-                  Message
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Blocked state */}
-          {isBlocked && (
-            <View className="w-full px-4">
-              <View className="bg-red-500/5 p-4 rounded-xl items-center">
-                <Text variant="body" className="text-red-500 font-sans-semibold mb-2">You blocked this user</Text>
-                <TouchableOpacity onPress={handleBlock} className="px-4 py-2 bg-red-500/10 rounded-xl">
-                  <Text variant="caption" className="text-red-500 font-sans-semibold uppercase tracking-widest text-[10px]">
-                    Unblock
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
         </View>
 
-        {/* ── Content Toggle ── */}
+        {/* Blocked state banner */}
+        {isBlocked && (
+          <View style={{ paddingHorizontal: 20, paddingBottom: 16, backgroundColor: surfaceBg }}>
+            <View className="bg-red-500/5 p-4 rounded-xl items-center">
+              <Text variant="body" className="text-red-500 font-sans-semibold mb-2">
+                You blocked this user
+              </Text>
+              <TouchableOpacity onPress={handleBlock} className="px-4 py-2 bg-red-500/10 rounded-xl">
+                <Text variant="caption" className="text-red-500 font-sans-semibold uppercase tracking-widest text-[10px]">
+                  Unblock
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* ── Content Toggle + Listings/Posts ── */}
         {!isBlocked && (
           <>
-            <View className="flex-row bg-surface dark:bg-surface-dark" style={{ borderBottomWidth: 1, borderBottomColor: borderColor }}>
+            <View
+              className="flex-row bg-surface dark:bg-surface-dark"
+              style={{ borderTopWidth: 1, borderBottomWidth: 1, borderColor: borderColor }}
+            >
               {[
-                { key: "listings" as const, label: "Listings", Icon: Grid,         activeColor: "#14B8A6" },
-                { key: "posts"    as const, label: "Posts",    Icon: MessageSquare, activeColor: "#F43F5E" },
+                { key: "listings" as const, label: "Listings",    Icon: Grid,          activeColor: "#14B8A6" },
+                { key: "posts"    as const, label: "Posts",       Icon: MessageSquare, activeColor: "#F43F5E" },
               ].map(({ key, label, Icon, activeColor }) => (
                 <TouchableOpacity
                   key={key}
                   onPress={() => setViewMode(key)}
                   className="flex-1 items-center py-4"
-                  style={{ borderBottomWidth: 2, borderBottomColor: viewMode === key ? activeColor : "transparent" }}
+                  style={{
+                    borderBottomWidth: 2,
+                    borderBottomColor: viewMode === key ? activeColor : "transparent",
+                  }}
                 >
-                  <Icon size={20} color={viewMode === key ? activeColor : isDark ? "#636366" : "#8E8E93"} />
+                  <Icon
+                    size={20}
+                    color={viewMode === key ? activeColor : isDark ? "#636366" : "#8E8E93"}
+                  />
                   <Text
                     variant="label"
                     className={`mt-1 font-sans-semibold ${
@@ -364,14 +574,15 @@ export default function OtherProfileScreen() {
               ))}
             </View>
 
-            {/* Content */}
             <View className="pt-4 bg-surface dark:bg-surface-dark">
               {viewMode === "listings" ? (
                 loadingListings ? (
-                  <ActivityIndicator color="#14B8A6" className="mt-8" />
+                  <ActivityIndicator color="#14B8A6" style={{ marginTop: 32 }} />
                 ) : listings.length === 0 ? (
                   <View className="items-center justify-center pt-12">
-                    <Text variant="body" className="text-content-secondary dark:text-ink-dark-muted">No listings yet.</Text>
+                    <Text variant="body" className="text-content-secondary dark:text-ink-dark-muted">
+                      No listings yet.
+                    </Text>
                   </View>
                 ) : (
                   listings.map((item) => (
@@ -385,14 +596,21 @@ export default function OtherProfileScreen() {
                   ))
                 )
               ) : loadingPosts ? (
-                <ActivityIndicator color="#F43F5E" className="mt-8" />
+                <ActivityIndicator color="#F43F5E" style={{ marginTop: 32 }} />
               ) : posts.length === 0 ? (
                 <View className="items-center justify-center pt-12">
-                  <Text variant="body" className="text-content-secondary dark:text-ink-dark-muted">No posts yet.</Text>
+                  <Text variant="body" className="text-content-secondary dark:text-ink-dark-muted">
+                    No posts yet.
+                  </Text>
                 </View>
               ) : (
                 posts.map((post) => (
-                  <PostCard key={post.id} post={post} hasUpvoted={false} onPress={() => {}} />
+                  <PostCard
+                    key={post.id}
+                    post={post}
+                    hasUpvoted={false}
+                    onPress={() => router.push(`/post/${post.id}` as any)}
+                  />
                 ))
               )}
             </View>

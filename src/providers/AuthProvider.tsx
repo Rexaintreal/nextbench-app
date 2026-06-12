@@ -40,6 +40,7 @@ export interface UserData {
   city?: string;
   createdAt: any;
   updatedAt: any;
+  coverPhoto?: string;
   chatPrivacy?: {
     followersOnly?: boolean;
   };
