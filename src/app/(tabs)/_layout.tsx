@@ -1,15 +1,7 @@
-/**
- * Tabs Layout
- *
- * Bottom tab navigator for the main app.
- * Clean, minimal tab bar with blur background.
- */
-
 import React, { useState, useEffect } from "react";
 import { Tabs, useRouter, usePathname } from "expo-router";
 import { useColorScheme, View, StyleSheet, TouchableOpacity, Text } from "react-native";
 import { Home, Search, Plus, MessageSquare, User, Bell } from "lucide-react-native";
-import { BlurView } from "expo-blur";
 import Animated, { useAnimatedStyle, withSpring, withSequence, useSharedValue, withDelay, runOnJS } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/providers/AuthProvider";
@@ -49,13 +41,14 @@ export default function TabLayout() {
   const iconColor = isDark ? "#8E8E93" : "#8E8E93";
   const activeColor = isDark ? "#2DD4BF" : "#14B8A6";
 
-  const [unreadCount, setUnreadCount] = useState(0);
+  // Only new_message notifications → badge on Messages tab + toast
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [toastMessage, setToastMessage] = useState<{title: string, message: string, link: string} | null>(null);
   const toastY = useSharedValue(-150);
 
   useEffect(() => {
     if (!user) {
-      setUnreadCount(0);
+      setUnreadMessageCount(0);
       return;
     }
 
@@ -66,21 +59,18 @@ export default function TabLayout() {
       .where("read", "==", false)
       .where("type", "==", "new_message")
       .onSnapshot((snap) => {
-        setUnreadCount(snap.size);
+        setUnreadMessageCount(snap.size);
 
         if (!initialLoad) {
           snap.docChanges().forEach((change) => {
             if (change.type === "added") {
               const data = change.doc.data();
-              
-              // Only show toast if we are not already on the target screen
               if (data.link !== pathname) {
                 setToastMessage({
                   title: data.title || "New Message",
                   message: data.message || "",
                   link: data.link || ""
                 });
-                
                 toastY.value = withSequence(
                   withSpring(insets.top + 10, { damping: 15 }),
                   withDelay(4000, withSpring(-150, { damping: 15 }, (finished) => {
@@ -141,39 +131,47 @@ export default function TabLayout() {
           name="index"
           options={{
             title: "Home",
-            tabBarIcon: ({ focused }) => <AnimatedIcon focused={focused} IconComponent={Home} activeColor={activeColor} iconColor={iconColor} />,
+            tabBarIcon: ({ focused }) => (
+              <AnimatedIcon focused={focused} IconComponent={Home} activeColor={activeColor} iconColor={iconColor} />
+            ),
           }}
         />
         <Tabs.Screen
           name="search"
           options={{
             title: "Search",
-            tabBarIcon: ({ focused }) => <AnimatedIcon focused={focused} IconComponent={Search} activeColor={activeColor} iconColor={iconColor} />,
+            tabBarIcon: ({ focused }) => (
+              <AnimatedIcon focused={focused} IconComponent={Search} activeColor={activeColor} iconColor={iconColor} />
+            ),
           }}
         />
-        
         <Tabs.Screen
           name="create"
           options={{
             title: "Sell",
-            tabBarIcon: ({ focused }) => <AnimatedIcon focused={focused} IconComponent={Plus} activeColor={activeColor} iconColor={iconColor} size={26} />,
+            tabBarIcon: ({ focused }) => (
+              <AnimatedIcon focused={focused} IconComponent={Plus} activeColor={activeColor} iconColor={iconColor} size={26} />
+            ),
           }}
         />
-
         <Tabs.Screen
           name="messages"
           options={{
             title: "Messages",
-            tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+            tabBarBadge: unreadMessageCount > 0 ? unreadMessageCount : undefined,
             tabBarBadgeStyle: { backgroundColor: '#F43F5E', fontSize: 10, marginTop: 2 },
-            tabBarIcon: ({ focused }) => <AnimatedIcon focused={focused} IconComponent={MessageSquare} activeColor={activeColor} iconColor={iconColor} />,
+            tabBarIcon: ({ focused }) => (
+              <AnimatedIcon focused={focused} IconComponent={MessageSquare} activeColor={activeColor} iconColor={iconColor} />
+            ),
           }}
         />
         <Tabs.Screen
           name="profile"
           options={{
             title: "Profile",
-            tabBarIcon: ({ focused }) => <AnimatedIcon focused={focused} IconComponent={User} activeColor={activeColor} iconColor={iconColor} />,
+            tabBarIcon: ({ focused }) => (
+              <AnimatedIcon focused={focused} IconComponent={User} activeColor={activeColor} iconColor={iconColor} />
+            ),
           }}
         />
       </Tabs>
@@ -208,8 +206,12 @@ export default function TabLayout() {
               <Bell size={20} color="#14B8A6" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: isDark ? "#FFF" : "#000", fontWeight: "600", fontSize: 15, marginBottom: 2 }}>{toastMessage.title}</Text>
-              <Text style={{ color: isDark ? "#A1A1AA" : "#71717A", fontSize: 13 }} numberOfLines={1}>{toastMessage.message}</Text>
+              <Text style={{ color: isDark ? "#FFF" : "#000", fontWeight: "600", fontSize: 15, marginBottom: 2 }}>
+                {toastMessage.title}
+              </Text>
+              <Text style={{ color: isDark ? "#A1A1AA" : "#71717A", fontSize: 13 }} numberOfLines={1}>
+                {toastMessage.message}
+              </Text>
             </View>
           </TouchableOpacity>
         </Animated.View>

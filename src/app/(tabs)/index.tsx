@@ -36,12 +36,31 @@ export default function FeedScreen() {
   const { colorScheme, isDark, toggleTheme } = useTheme();
   const [optimisticUpvotes, setOptimisticUpvotes] = useState<Record<string, { liked: boolean; count: number }>>({});
   const upvoteSyncRefs = useRef<Record<string, { timer: ReturnType<typeof setTimeout> | null; baseline: boolean }>>({});
-  // Realtime feed update tracking
   const flatListRef = useRef<FlatList>(null);
   const [committedFeedItems, setCommittedFeedItems] = useState<FeedItem[]>([]);
   const [pendingNewCount, setPendingNewCount] = useState(0);
   const pillAnim = useRef(new Animated.Value(0)).current;
   const prevTabRef = useRef(contentType);
+
+  // Unread non-message notifications → bell badge
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) { setUnreadNotifCount(0); return; }
+    const unsub = firestore()
+      .collection("notifications")
+      .where("userId", "==", user.uid)
+      .where("read", "==", false)
+      .onSnapshot((snap) => {
+        if (!snap) return;
+        // filter out chat notifications client-side to avoid needing a composite index
+        const count = snap.docs.filter(d => d.data().type !== "new_message").length;
+        setUnreadNotifCount(count);
+      }, (error) => {
+        console.warn("Notif listener error:", error);
+      });
+    return () => unsub();
+  }, [user]);
 
   // Listen to approved posts
   useEffect(() => {
@@ -135,6 +154,7 @@ export default function FeedScreen() {
       });
     return () => unsub();
   }, [user]);
+
   useEffect(() => {
     setOptimisticUpvotes(prev => {
       let changed = false;
@@ -151,6 +171,7 @@ export default function FeedScreen() {
       return changed ? next : prev;
     });
   }, [upvotedPostIds]);
+
   // Listen to user's wishlists
   useEffect(() => {
     if (!user) return;
@@ -274,8 +295,6 @@ export default function FeedScreen() {
     }
   }, [rawPosts, products, contentType, followingIds, userData]);
 
-  // Sync committed feed: commit silently on tab switch or first load,
-  // show pill only when genuinely new items arrive on the same tab.
   useEffect(() => {
     if (!feedItems || loadingPosts || loadingProducts) return;
 
@@ -283,14 +302,12 @@ export default function FeedScreen() {
     prevTabRef.current = contentType;
 
     if (tabChanged || committedFeedItems.length === 0) {
-      // Tab just switched or initial load — commit without showing pill
       setCommittedFeedItems(feedItems);
       setPendingNewCount(0);
       pillAnim.setValue(0);
       return;
     }
 
-    // Same tab — diff against what is currently shown
     const committedIds = new Set(committedFeedItems.map(i => `${i.type}-${i.data.id}`));
     const genuinelyNew = feedItems.filter(i => !committedIds.has(`${i.type}-${i.data.id}`));
 
@@ -303,9 +320,6 @@ export default function FeedScreen() {
         friction: 10,
       }).start();
     } else {
-      // No new items, but existing items (likes, comments, poll votes, etc.)
-      // may have changed — silently refresh their data in place so cards
-      // stay live without disrupting scroll position or showing the pill.
       const feedDataById = new Map(feedItems.map(i => [`${i.type}-${i.data.id}`, i]));
       setCommittedFeedItems(prev => {
         let changed = false;
@@ -320,7 +334,7 @@ export default function FeedScreen() {
         return changed ? next : prev;
       });
     }
-  }, [feedItems, contentType, loadingPosts, loadingProducts]);   // <-- ADD THIS LINE BACK
+  }, [feedItems, contentType, loadingPosts, loadingProducts]);
 
   const handleNewPostsPill = useCallback(() => {
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -458,17 +472,39 @@ export default function FeedScreen() {
             >
               {isDark ? <Sun size={20} color={iconColor} /> : <Moon size={20} color={iconColor} />}
             </TouchableOpacity>
+
+            {/* Bell icon with badge */}
             <TouchableOpacity 
               onPress={() => router.push('/notifications')} 
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               className="p-1"
             >
-              <Bell size={20} color={iconColor} />
+              <View>
+                <Bell size={20} color={iconColor} />
+                {unreadNotifCount > 0 && (
+                  <View style={{
+                    position: 'absolute',
+                    top: -4,
+                    right: -4,
+                    backgroundColor: '#F43F5E',
+                    borderRadius: 999,
+                    minWidth: 15,
+                    height: 15,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingHorizontal: 3,
+                  }}>
+                    <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', lineHeight: 13 }}>
+                      {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Segment Control Tabs — FIXED for dark mode */}
+        {/* Segment Control Tabs */}
         <View className="flex-row bg-surface-soft dark:bg-surface-dark-secondary rounded-xl p-1 mb-3">
           {tabs.map(tab => (
             <TouchableOpacity
@@ -512,7 +548,6 @@ export default function FeedScreen() {
         </ScrollView>
       ) : (
         <>
-          {/* Realtime "new posts" pill */}
           {pendingNewCount > 0 && (
             <Animated.View
               style={{
@@ -559,50 +594,50 @@ export default function FeedScreen() {
             </Animated.View>
           )}
           <FlatList
-          ref={flatListRef}
-          data={committedFeedItems}
-          keyExtractor={item => `${item.type}-${item.data.id}`}
-          renderItem={renderItem}
-          ListHeaderComponent={
-            <View className="px-5 py-3">
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-full bg-surface-soft dark:bg-surface-dark-secondary overflow-hidden mr-3">
-                  {userData?.profilePicture ? (
-                    <Image source={{ uri: userData.profilePicture }} className="w-full h-full" />
-                  ) : (
-                    <View className="w-full h-full items-center justify-center">
-                      <Text variant="label" className="text-content-secondary font-sans-semibold">
-                        {userData?.name?.[0]?.toUpperCase() || '?'}
-                      </Text>
-                    </View>
-                  )}
+            ref={flatListRef}
+            data={committedFeedItems}
+            keyExtractor={item => `${item.type}-${item.data.id}`}
+            renderItem={renderItem}
+            ListHeaderComponent={
+              <View className="px-5 py-3">
+                <View className="flex-row items-center">
+                  <View className="w-10 h-10 rounded-full bg-surface-soft dark:bg-surface-dark-secondary overflow-hidden mr-3">
+                    {userData?.profilePicture ? (
+                      <Image source={{ uri: userData.profilePicture }} className="w-full h-full" />
+                    ) : (
+                      <View className="w-full h-full items-center justify-center">
+                        <Text variant="label" className="text-content-secondary font-sans-semibold">
+                          {userData?.name?.[0]?.toUpperCase() || '?'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <TouchableOpacity 
+                    onPress={() => router.push('/post/create' as any)}
+                    className="flex-1 h-10 px-4 rounded-full bg-surface-soft dark:bg-surface-dark-secondary justify-center"
+                    activeOpacity={0.7}
+                  >
+                    <Text variant="bodySmall" className="text-content-tertiary dark:text-ink-dark-faint">
+                      What's on your mind?
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity 
-                  onPress={() => router.push('/post/create' as any)}
-                  className="flex-1 h-10 px-4 rounded-full bg-surface-soft dark:bg-surface-dark-secondary justify-center"
-                  activeOpacity={0.7}
-                >
-                  <Text variant="bodySmall" className="text-content-tertiary dark:text-ink-dark-faint">
-                    What's on your mind?
-                  </Text>
-                </TouchableOpacity>
               </View>
-            </View>
-          }
-          contentContainerStyle={{ paddingBottom: 120 }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#14B8A6" />
-          }
-          ListEmptyComponent={
-            <View className="flex-1 items-center justify-center pt-20 px-6">
-              <Text variant="h3" className="text-content-secondary dark:text-ink-dark-muted mb-2">Nothing here yet</Text>
-              <Text variant="caption" className="text-center text-content-tertiary dark:text-ink-dark-faint">
-                Check back later or create a new post.
-              </Text>
-            </View>
-          }
-        />
+            }
+            contentContainerStyle={{ paddingBottom: 120 }}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#14B8A6" />
+            }
+            ListEmptyComponent={
+              <View className="flex-1 items-center justify-center pt-20 px-6">
+                <Text variant="h3" className="text-content-secondary dark:text-ink-dark-muted mb-2">Nothing here yet</Text>
+                <Text variant="caption" className="text-center text-content-tertiary dark:text-ink-dark-faint">
+                  Check back later or create a new post.
+                </Text>
+              </View>
+            }
+          />
         </>
       )}
 
