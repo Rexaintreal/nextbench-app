@@ -29,12 +29,9 @@ export {
   increment,
 } from "./firestore";
 
+
 // Storage
 export {
-  uploadFile,
-  uploadFiles,
-  deleteFile,
-  getDownloadURL,
-  generatePostImagePath,
-  generateAvatarPath,
+  uploadChatImageMobile,
+  uploadCoverPhotoMobile,
 } from "./storage";

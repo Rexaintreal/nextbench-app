@@ -347,12 +347,13 @@ export default function FeedScreen() {
     }).start();
   }, [feedItems, pillAnim]);
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     setCommittedFeedItems(feedItems ?? []);
     setPendingNewCount(0);
     pillAnim.setValue(0);
-    setTimeout(() => setRefreshing(false), 1000);
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    setRefreshing(false);
   }, [feedItems, pillAnim]);
 
   const handleUpvote = (post: Post) => {
