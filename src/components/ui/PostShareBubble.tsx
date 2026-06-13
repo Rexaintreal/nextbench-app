@@ -1,37 +1,17 @@
-/**
- * PostShareBubble
- *
- * Renders a shared post inside a chat message bubble.
- * Tapping it navigates to the post detail screen.
- *
- * Usage (inside your chat [id].tsx message renderer):
- *   if (msg.type === 'post_share') {
- *     return <PostShareBubble message={msg} isMine={isMine} />;
- *   }
- */
-
 import React from 'react';
 import { View, TouchableOpacity, Image, useColorScheme } from 'react-native';
 import { router } from 'expo-router';
 import { Text } from '@/components/ui/Text';
-import { FileText } from 'lucide-react-native';
+import { FileText, ShoppingBag } from 'lucide-react-native';
 
 interface PostShareBubbleProps {
   message: {
     id: string;
     senderId: string;
-    type: 'post_share';
-    postId: string;
-    postSnapshot: {
-      title?: string;
-      content?: string;
-      authorName?: string;
-      authorProfilePicture?: string | null;
-      imageUrl?: string | null;
-      isAnonymous?: boolean;
-      type?: string;
-    };
-    /** Optional plain-text message the sender added */
+    type?: string;
+    postId?: string;
+    postSnapshot?: any;
+    sharedPost?: any;
     text?: string;
     createdAt: any;
   };
@@ -41,55 +21,49 @@ interface PostShareBubbleProps {
 export default function PostShareBubble({ message, isMine }: PostShareBubbleProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const snap = message.postSnapshot || {};
 
-  const displayName = snap.isAnonymous ? 'Anonymous' : snap.authorName || 'Unknown';
-  const avatarLetter = displayName[0]?.toUpperCase() || '?';
+  // Handle both field shapes (postSnapshot from new mobile, sharedPost from web/old mobile)
+  const raw = message.postSnapshot || message.sharedPost || {};
+  const postId = message.postId || raw.id || '';
+  const isProduct = raw.kind === 'product' || raw.type === 'product';
+
+  const title = raw.title || '';
+  const body = raw.content || raw.description || '';
+  const imageUrl = raw.imageUrl || raw.image || null;
+  const authorName = raw.isAnonymous ? 'Anonymous' : (raw.authorName || 'Unknown');
+  const avatarLetter = authorName[0]?.toUpperCase() || '?';
 
   const handlePress = () => {
-    if (message.postId) {
-      router.push(`/post/${message.postId}` as any);
-    }
+    if (!postId) return;
+    router.push(`/${isProduct ? 'product' : 'post'}/${postId}` as any);
   };
 
-  const bubbleBg = isMine
-    ? '#0071E3'
-    : isDark
-    ? '#2C2C2E'
-    : '#F0F0F5';
-
-  const cardBg = isMine
-    ? 'rgba(255,255,255,0.15)'
-    : isDark
-    ? '#3A3A3C'
-    : '#FFFFFF';
-
-  const textColor = isMine ? '#FFFFFF' : isDark ? '#F5F5F7' : '#1A1A1C';
-  const mutedColor = isMine ? 'rgba(255,255,255,0.7)' : '#8E8E93';
-  const borderColor = isMine ? 'rgba(255,255,255,0.2)' : isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
+  const bubbleBg = isMine ? '#0071E3' : isDark ? '#2C2C2E' : '#F0F0F5';
+  const cardBg = isDark ? '#1C1C1E' : '#FFFFFF';
+  const textColor = isDark ? '#F5F5F7' : '#1A1A1C';
+  const mutedColor = isDark ? '#98989D' : '#8E8E93';
+  const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
+  const avatarBg = isDark ? '#2C2C2E' : '#E5E5EA';
 
   return (
     <View style={{ maxWidth: 280 }}>
-      {/* Optional caption message */}
+      {/* Optional caption */}
       {message.text ? (
-        <View
-          style={{
-            backgroundColor: bubbleBg,
-            borderRadius: 18,
-            borderBottomLeftRadius: isMine ? 18 : 4,
-            borderBottomRightRadius: isMine ? 4 : 18,
-            paddingHorizontal: 14,
-            paddingVertical: 10,
-            marginBottom: 4,
-          }}
-        >
-          <Text style={{ color: textColor, fontSize: 15, lineHeight: 21 }}>
+        <View style={{
+          backgroundColor: bubbleBg,
+          borderRadius: 18,
+          borderBottomLeftRadius: isMine ? 18 : 4,
+          borderBottomRightRadius: isMine ? 4 : 18,
+          paddingHorizontal: 14,
+          paddingVertical: 10,
+          marginBottom: 4,
+        }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 15, lineHeight: 21 }}>
             {message.text}
           </Text>
         </View>
       ) : null}
 
-      {/* Post card */}
       <TouchableOpacity
         onPress={handlePress}
         activeOpacity={0.8}
@@ -97,106 +71,90 @@ export default function PostShareBubble({ message, isMine }: PostShareBubbleProp
           backgroundColor: cardBg,
           borderRadius: 14,
           borderWidth: 1,
-          borderColor: borderColor,
+          borderColor,
           overflow: 'hidden',
         }}
       >
         {/* Cover image */}
-        {snap.imageUrl ? (
+        {imageUrl ? (
           <Image
-            source={{ uri: snap.imageUrl }}
-            style={{ width: '100%', height: 130 }}
+            source={{ uri: imageUrl }}
+            style={{ width: '100%', height: 150 }}
             resizeMode="cover"
           />
         ) : null}
 
         <View style={{ padding: 12 }}>
-          {/* Author row */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-            <View
-              style={{
-                width: 24,
-                height: 24,
-                borderRadius: 12,
-                backgroundColor: isMine
-                  ? 'rgba(255,255,255,0.2)'
-                  : isDark
-                  ? '#48484A'
-                  : '#E5E5EA',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginRight: 6,
-                overflow: 'hidden',
-              }}
-            >
-              {!snap.isAnonymous && snap.authorProfilePicture ? (
-                <Image
-                  source={{ uri: snap.authorProfilePicture }}
-                  style={{ width: '100%', height: '100%' }}
-                  resizeMode="cover"
-                />
+          {/* Author + type badge row */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <View style={{
+              width: 24, height: 24, borderRadius: 12,
+              backgroundColor: avatarBg,
+              alignItems: 'center', justifyContent: 'center',
+              marginRight: 6, overflow: 'hidden',
+            }}>
+              {!raw.isAnonymous && raw.authorProfilePicture ? (
+                <Image source={{ uri: raw.authorProfilePicture }}
+                  style={{ width: '100%', height: '100%' }} resizeMode="cover" />
               ) : (
                 <Text style={{ fontSize: 10, fontWeight: '600', color: mutedColor }}>
                   {avatarLetter}
                 </Text>
               )}
             </View>
-            <Text style={{ fontSize: 12, color: mutedColor, fontWeight: '500' }}>
-              {displayName}
+            <Text style={{ fontSize: 12, color: mutedColor, fontWeight: '500', flex: 1 }} numberOfLines={1}>
+              {authorName}
             </Text>
-            {snap.type ? (
-              <View
-                style={{
-                  marginLeft: 6,
-                  paddingHorizontal: 6,
-                  paddingVertical: 2,
-                  borderRadius: 6,
-                  backgroundColor: isMine
-                    ? 'rgba(255,255,255,0.15)'
-                    : isDark
-                    ? '#48484A'
-                    : '#F0F0F5',
-                }}
-              >
-                <Text style={{ fontSize: 10, color: mutedColor, fontWeight: '600', textTransform: 'capitalize' }}>
-                  {snap.type}
-                </Text>
-              </View>
-            ) : null}
+            {/* Type badge */}
+            <View style={{
+              paddingHorizontal: 8, paddingVertical: 3,
+              borderRadius: 6,
+              backgroundColor: isProduct
+                ? 'rgba(20,184,166,0.1)'
+                : isDark ? '#2C2C2E' : '#F0F0F5',
+            }}>
+              <Text style={{
+                fontSize: 10, fontWeight: '600',
+                color: isProduct ? '#14B8A6' : mutedColor,
+                textTransform: 'capitalize',
+              }}>
+                {isProduct ? 'Product' : (raw.type || raw.kind || 'Post')}
+              </Text>
+            </View>
           </View>
 
           {/* Title */}
-          {snap.title ? (
-            <Text
-              style={{ fontSize: 14, fontWeight: '700', color: textColor, marginBottom: 4 }}
-              numberOfLines={2}
-            >
-              {snap.title}
+          {title ? (
+            <Text style={{ fontSize: 14, fontWeight: '700', color: textColor, marginBottom: 4 }}
+              numberOfLines={2}>
+              {title}
             </Text>
           ) : null}
 
-          {/* Content */}
-          <Text
-            style={{ fontSize: 13, color: mutedColor, lineHeight: 18 }}
-            numberOfLines={snap.title ? 2 : 3}
-          >
-            {snap.content || ''}
-          </Text>
+          {/* Price line for products, content for posts */}
+          {!isProduct && body ? (
+            <Text style={{ fontSize: 13, color: mutedColor, lineHeight: 18 }}
+              numberOfLines={title ? 2 : 3}>
+              {body}
+            </Text>
+          ) : isProduct && body ? (
+            <Text style={{ fontSize: 15, fontWeight: '700', color: textColor, marginBottom: 2 }}>
+              {body}
+            </Text>
+          ) : null}
 
           {/* Tap hint */}
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              marginTop: 8,
-              paddingTop: 8,
-              borderTopWidth: 1,
-              borderTopColor: borderColor,
-            }}
-          >
-            <FileText size={12} color={mutedColor} />
+          <View style={{
+            flexDirection: 'row', alignItems: 'center',
+            marginTop: 10, paddingTop: 10,
+            borderTopWidth: 1, borderTopColor: borderColor,
+          }}>
+            {isProduct
+              ? <ShoppingBag size={12} color={mutedColor} />
+              : <FileText size={12} color={mutedColor} />
+            }
             <Text style={{ fontSize: 12, color: mutedColor, marginLeft: 4 }}>
-              View post
+              {isProduct ? 'View product' : 'View post'}
             </Text>
           </View>
         </View>

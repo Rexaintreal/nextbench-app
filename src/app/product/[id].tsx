@@ -273,7 +273,7 @@ export default function ProductDetailScreen() {
         post={{
           id: product.id,
           title: product.title,
-          content: product.description || `₹${product.price} · ${product.condition} · ${product.category}`,
+          content: `₹${product.price}`,
           authorId: product.sellerId,
           authorName: product.sellerName,
           authorProfilePicture: null,

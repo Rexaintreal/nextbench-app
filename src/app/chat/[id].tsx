@@ -14,6 +14,7 @@ import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { createNotification } from "@/lib/notifications";
 import { AppAlert } from '@/components/ui/AppAlert';
+import PostShareBubble from '@/components/ui/PostShareBubble';
 
 interface Message {
   id: string;
@@ -29,6 +30,22 @@ interface Message {
     image?: string;
     senderName?: string;
   };
+  // shared post fields
+  sharedPost?: {
+    id: string;
+    title?: string;
+    content?: string;
+    description?: string;
+    authorName?: string;
+    authorProfilePicture?: string | null;
+    image?: string | null;
+    isAnonymous?: boolean;
+    type?: string;
+    kind?: string;
+  };
+  postSnapshot?: any;
+  postId?: string;
+  type?: string;
 }
 
 const MessageItem = ({ item, user, isDark, handleMessageLongPress, setReplyingTo, onImagePress }: any) => {
@@ -69,41 +86,66 @@ const MessageItem = ({ item, user, isDark, handleMessageLongPress, setReplyingTo
           }`}
           style={!isMe ? { borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' } : undefined}
         >
-          {isDeleted ? (
-            <Text variant="caption" className={`italic ${isMe ? 'text-white/60' : 'text-content-secondary dark:text-ink-dark-muted'}`}>
-              This message was deleted
-            </Text>
-          ) : (
-            <>
-              {item.replyTo && (
-                <View className={`mb-2 px-3 py-2 rounded-lg border-l-4 ${
-                  isMe
-                    ? 'bg-black/10 border-white/50'
-                    : 'bg-surface-soft dark:bg-surface-dark-secondary border-brand-teal/50'
-                }`}>
-                  <Text variant="caption" className={`font-sans-semibold ${isMe ? 'text-white/80' : 'text-brand-teal'}`}>
-                    {item.replyTo.senderName}
-                  </Text>
-                  <Text variant="caption" className={`${isMe ? 'text-white/70' : 'text-content-secondary dark:text-ink-dark-muted'}`} numberOfLines={2}>
-                    {item.replyTo.text}
-                  </Text>
-                </View>
-              )}
-              {item.image && (
-                <TouchableOpacity onPress={() => onImagePress?.(item.image)} activeOpacity={0.9}>
-                  <Image source={{ uri: item.image }} className="w-48 h-48 rounded-lg mb-2" resizeMode="cover" />
-                  <View style={{ position: 'absolute', bottom: 10, right: 6, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 12, padding: 4 }}>
-                    <ZoomIn size={14} color="#fff" />
-                  </View>
-                </TouchableOpacity>
-              )}
-              {item.text && (
-                <Text variant="body" className={`${isMe ? 'text-white' : 'text-content dark:text-ink-dark'}`}>
-                  {item.text}
+        {isDeleted ? (
+          <Text variant="caption" className={`italic ${isMe ? 'text-white/60' : 'text-content-secondary dark:text-ink-dark-muted'}`}>
+            This message was deleted
+          </Text>
+        ) : (
+          <>
+            {item.replyTo && (
+              <View className={`mb-2 px-3 py-2 rounded-lg border-l-4 ${
+                isMe
+                  ? 'bg-black/10 border-white/50'
+                  : 'bg-surface-soft dark:bg-surface-dark-secondary border-brand-teal/50'
+              }`}>
+                <Text variant="caption" className={`font-sans-semibold ${isMe ? 'text-white/80' : 'text-brand-teal'}`}>
+                  {item.replyTo.senderName}
                 </Text>
-              )}
-            </>
-          )}
+                <Text variant="caption" className={`${isMe ? 'text-white/70' : 'text-content-secondary dark:text-ink-dark-muted'}`} numberOfLines={2}>
+                  {item.replyTo.text}
+                </Text>
+              </View>
+            )}
+
+            {/* ↓ NEW: shared post/product bubble */}
+            {(item.sharedPost || item.postSnapshot) && (
+              <PostShareBubble
+                message={{
+                  id: item.id,
+                  senderId: item.senderId,
+                  type: 'post_share',
+                  postId: item.postId || item.sharedPost?.id || item.postSnapshot?.id || '',
+                  postSnapshot: {
+                    title: item.sharedPost?.title || item.postSnapshot?.title,
+                    content: item.sharedPost?.description || item.sharedPost?.content || item.postSnapshot?.content,
+                    authorName: item.sharedPost?.authorName || item.postSnapshot?.authorName,
+                    authorProfilePicture: item.sharedPost?.authorProfilePicture || item.postSnapshot?.authorProfilePicture || null,
+                    imageUrl: item.sharedPost?.image || item.postSnapshot?.imageUrl || null,
+                    isAnonymous: item.sharedPost?.isAnonymous || item.postSnapshot?.isAnonymous || false,
+                    type: item.sharedPost?.kind || item.sharedPost?.type || item.postSnapshot?.type,
+                  },
+                  text: item.text,
+                  createdAt: item.createdAt,
+                }}
+                isMine={isMe}
+              />
+            )}
+
+            {item.image && (
+              <TouchableOpacity onPress={() => onImagePress?.(item.image)} activeOpacity={0.9}>
+                <Image source={{ uri: item.image }} className="w-48 h-48 rounded-lg mb-2" resizeMode="cover" />
+                <View style={{ position: 'absolute', bottom: 10, right: 6, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 12, padding: 4 }}>
+                  <ZoomIn size={14} color="#fff" />
+                </View>
+              </TouchableOpacity>
+            )}
+            {item.text && !(item.sharedPost || item.postSnapshot) && (
+              <Text variant="body" className={`${isMe ? 'text-white' : 'text-content dark:text-ink-dark'}`}>
+                {item.text}
+              </Text>
+            )}
+          </>
+        )}
         </TouchableOpacity>
       </View>
     </Swipeable>

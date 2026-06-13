@@ -40,7 +40,7 @@ export default function ProductCard({ product, isWishlisted, onPress, onToggleWi
   const productAsShareable = {
     id: product.id,
     title: product.title,
-    content: product.description || `₹${product.price} · ${product.condition} · ${product.category}`,
+    content: `₹${product.price}`,
     authorId: product.sellerId,
     authorName: product.sellerName,
     authorProfilePicture: null,

@@ -206,9 +206,8 @@ export async function sendPostToChat(
   const sharedPost: Record<string, any> = {
     id: post.id,
     title: post.title || '',
-    description: isProduct
-      ? post.content || ''   // content holds "₹price · condition · category"
-      : post.content || '',
+    description: post.content || '',  // keep for web compat
+    content: post.content || '',      // ← add this so PostShareBubble finds it
     authorName: post.isAnonymous ? 'Anonymous' : (post.authorName || ''),
     kind: isProduct ? 'product' : 'post',
   };
