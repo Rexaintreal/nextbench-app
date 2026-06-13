@@ -81,11 +81,12 @@ export default function ProfileScreen() {
           const postIds = snap.docs.map(d => d.data().postId).filter(Boolean) as string[];
           if (!postIds.length) { setSavedPosts([]); setLoadingPlaylist(false); return; }
           let all: Post[] = [];
-          for (let i = 0; i < postIds.length; i += 30) {
-            const chunk = postIds.slice(i, i + 30);
-            const s = await firestore().collection("posts").where(firestore.FieldPath.documentId(), "in", chunk).get();
-            s.forEach(d => all.push({ id: d.id, ...d.data() } as Post));
-          }
+          const postDocs = await Promise.all(
+            postIds.map(pid => firestore().collection("posts").doc(pid).get())
+          );
+          postDocs
+            .filter(d => d.exists)
+            .forEach(d => all.push({ id: d.id, ...d.data() } as Post));
           all.sort((a, b) => postIds.indexOf(a.id) - postIds.indexOf(b.id));
           setSavedPosts(all);
         } catch { setSavedPosts([]); }
