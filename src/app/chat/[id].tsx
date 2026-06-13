@@ -1,10 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, FlatList, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Keyboard, Platform, Image, ImageBackground, useColorScheme, Modal, ScrollView } from "react-native";
+import {
+  View, FlatList, TextInput, TouchableOpacity, ActivityIndicator,
+  KeyboardAvoidingView, Keyboard, Platform, Image, ImageBackground,
+  useColorScheme, Modal, ScrollView, Animated, Dimensions,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
-import { ArrowLeft, Send, Image as ImageIcon, User, X, Reply, MoreVertical, ZoomIn } from "lucide-react-native";
+import {
+  ArrowLeft, Send, Image as ImageIcon, User, X, Reply, MoreVertical, ZoomIn,
+} from "lucide-react-native";
 import { blockUser, unblockUser, useBlockStatus } from "@/lib/blocks";
 import firestore from "@react-native-firebase/firestore";
 import { uploadChatImageMobile } from '@/services/firebase/storage';
@@ -15,6 +21,18 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { createNotification } from "@/lib/notifications";
 import { AppAlert } from '@/components/ui/AppAlert';
 import PostShareBubble from '@/components/ui/PostShareBubble';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '😡'] as const;
+type ReactionEmoji = typeof REACTION_EMOJIS[number];
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+// Picker is ~320px wide (6×48 + divider + more button + padding)
+const PICKER_WIDTH = 328;
+const PICKER_HEIGHT = 68;
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Message {
   id: string;
@@ -30,7 +48,7 @@ interface Message {
     image?: string;
     senderName?: string;
   };
-  // shared post fields
+  reactions?: Record<string, string[]>;
   sharedPost?: {
     id: string;
     title?: string;
@@ -48,109 +66,335 @@ interface Message {
   type?: string;
 }
 
-const MessageItem = ({ item, user, isDark, handleMessageLongPress, setReplyingTo, onImagePress }: any) => {
+// ─── Anchored Reaction Picker ─────────────────────────────────────────────────
+// Renders inside a full-screen Modal so it floats above everything,
+// but positioned at (anchorX, anchorY) so it looks attached to the bubble.
+
+interface ReactionPickerProps {
+  visible: boolean;
+  anchorX: number;   // left edge of picker, clamped to screen
+  anchorY: number;   // top of picker (already placed above bubble by caller)
+  onClose: () => void;
+  onReact: (emoji: ReactionEmoji) => void;
+  onMoreOptions: () => void;
+  isDark: boolean;
+  currentReactions?: Record<string, string[]>;
+  currentUserId?: string;
+}
+
+function ReactionPicker({
+  visible, anchorX, anchorY, onClose, onReact, onMoreOptions,
+  isDark, currentReactions, currentUserId,
+}: ReactionPickerProps) {
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.spring(scaleAnim, {
+          toValue: 1, useNativeDriver: true, tension: 150, friction: 8,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1, duration: 120, useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      scaleAnim.setValue(0);
+      opacityAnim.setValue(0);
+    }
+  }, [visible]);
+
+  if (!visible) return null;
+
+  // Clamp so picker never bleeds off-screen horizontally
+  const left = Math.max(8, Math.min(anchorX, SCREEN_WIDTH - PICKER_WIDTH - 8));
+
+  return (
+    <Modal transparent animationType="none" visible={visible} onRequestClose={onClose}>
+      {/* Invisible backdrop — tap anywhere outside to dismiss */}
+      <TouchableOpacity
+        style={{ flex: 1 }}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <Animated.View
+          style={{
+            position: 'absolute',
+            left,
+            top: anchorY,
+            width: PICKER_WIDTH,
+            height: PICKER_HEIGHT,
+            transform: [{ scale: scaleAnim }],
+            opacity: opacityAnim,
+            // Scale from bottom-centre so it pops up from the bubble
+            transformOrigin: 'bottom center',
+            backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF',
+            borderRadius: 34,
+            paddingHorizontal: 10,
+            paddingVertical: 10,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.18,
+            shadowRadius: 16,
+            elevation: 12,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >
+          {REACTION_EMOJIS.map((emoji) => {
+            const hasReacted = currentReactions?.[emoji]?.includes(currentUserId || '') ?? false;
+            return (
+              <TouchableOpacity
+                key={emoji}
+                onPress={() => { onReact(emoji); onClose(); }}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: hasReacted
+                    ? (isDark ? 'rgba(20,184,166,0.22)' : 'rgba(20,184,166,0.13)')
+                    : 'transparent',
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 24 }}>{emoji}</Text>
+              </TouchableOpacity>
+            );
+          })}
+
+          {/* Divider */}
+          <View style={{
+            width: 1, height: 28,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)',
+            marginHorizontal: 2,
+          }} />
+
+          {/* More options button */}
+          <TouchableOpacity
+            onPress={() => { onClose(); setTimeout(onMoreOptions, 120); }}
+            style={{
+              width: 44, height: 44, borderRadius: 22,
+              alignItems: 'center', justifyContent: 'center',
+            }}
+            activeOpacity={0.7}
+          >
+            <MoreVertical size={20} color={isDark ? '#8E8E93' : '#6B7280'} />
+          </TouchableOpacity>
+        </Animated.View>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+// ─── Reaction Summary Bar ─────────────────────────────────────────────────────
+
+interface ReactionBarProps {
+  reactions: Record<string, string[]>;
+  currentUserId: string;
+  onToggle: (emoji: string) => void;
+  isDark: boolean;
+  isMe: boolean;
+}
+
+function ReactionBar({ reactions, currentUserId, onToggle, isDark, isMe }: ReactionBarProps) {
+  const entries = Object.entries(reactions).filter(([, uids]) => uids.length > 0);
+  if (entries.length === 0) return null;
+
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 4,
+        marginTop: 4,
+        paddingHorizontal: 16,
+        justifyContent: isMe ? 'flex-end' : 'flex-start',
+      }}
+    >
+      {entries.map(([emoji, uids]) => {
+        const reacted = uids.includes(currentUserId);
+        return (
+          <TouchableOpacity
+            key={emoji}
+            onPress={() => onToggle(emoji)}
+            activeOpacity={0.75}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              borderRadius: 20,
+              borderWidth: 1.5,
+              borderColor: reacted
+                ? '#14B8A6'
+                : (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'),
+              backgroundColor: reacted
+                ? (isDark ? 'rgba(20,184,166,0.18)' : 'rgba(20,184,166,0.1)')
+                : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'),
+              gap: 4,
+            }}
+          >
+            <Text style={{ fontSize: 14 }}>{emoji}</Text>
+            {uids.length > 0 && (
+              <Text style={{
+                fontSize: 12,
+                fontWeight: '600',
+                color: reacted ? '#14B8A6' : (isDark ? '#9CA3AF' : '#6B7280'),
+              }}>
+                {uids.length}
+              </Text>
+            )}
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+// ─── Message Item ─────────────────────────────────────────────────────────────
+
+const MessageItem = ({
+  item, user, isDark, onMessagePress, onMessageLongPress, setReplyingTo,
+  onImagePress, onReact,
+}: any) => {
   const swipeableRef = useRef<any>(null);
+  const bubbleRef = useRef<View>(null);
   const isMe = item.senderId === user?.uid;
   const isDeleted = item.isDeletedForEveryone;
 
   if (item.deletedFor?.includes(user?.uid || '')) return null;
 
+  const reactions: Record<string, string[]> = item.reactions || {};
+  const hasReactions = Object.values(reactions).some((uids) => (uids as string[]).length > 0);
+
+  const handlePress = () => {
+    if (isDeleted) return;
+    // Measure the bubble's position on screen, then pass up so the picker
+    // can be anchored just above it.
+    bubbleRef.current?.measureInWindow((x, y, width, _height) => {
+      onMessagePress(item, x, y, width);
+    });
+  };
+
   return (
-    <Swipeable
-      ref={swipeableRef}
-      friction={2}
-      leftThreshold={40}
-      renderLeftActions={() => (
-        <View className="justify-center items-center w-16 pl-2">
-          <View className="w-8 h-8 rounded-full bg-surface-soft dark:bg-surface-dark-elevated items-center justify-center">
-            <Reply size={16} color="#8E8E93" />
+    <View>
+      <Swipeable
+        ref={swipeableRef}
+        friction={2}
+        leftThreshold={40}
+        renderLeftActions={() => (
+          <View className="justify-center items-center w-16 pl-2">
+            <View className="w-8 h-8 rounded-full bg-surface-soft dark:bg-surface-dark-elevated items-center justify-center">
+              <Reply size={16} color="#8E8E93" />
+            </View>
           </View>
+        )}
+        onSwipeableOpen={(direction: string) => {
+          if (direction === 'left') {
+            setReplyingTo(item);
+            swipeableRef.current?.close();
+          }
+        }}
+      >
+        <View className={`flex-row mb-1 px-4 ${isMe ? 'justify-end' : 'justify-start'}`}>
+          {/* ref on the inner bubble so we can measure its screen position */}
+          <TouchableOpacity
+            ref={bubbleRef}
+            onPress={handlePress}
+            onLongPress={() => !isDeleted && onMessageLongPress(item)}
+            delayLongPress={200}
+            activeOpacity={0.8}
+            className={`max-w-[80%] px-4 py-3 rounded-2xl ${
+              isMe
+                ? 'bg-brand-teal rounded-tr-sm'
+                : 'bg-surface dark:bg-surface-dark-elevated rounded-tl-sm'
+            }`}
+            style={!isMe ? { borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' } : undefined}
+          >
+            {isDeleted ? (
+              <Text variant="caption" className={`italic ${isMe ? 'text-white/60' : 'text-content-secondary dark:text-ink-dark-muted'}`}>
+                This message was deleted
+              </Text>
+            ) : (
+              <>
+                {item.replyTo && (
+                  <View className={`mb-2 px-3 py-2 rounded-lg border-l-4 ${
+                    isMe
+                      ? 'bg-black/10 border-white/50'
+                      : 'bg-surface-soft dark:bg-surface-dark-secondary border-brand-teal/50'
+                  }`}>
+                    <Text variant="caption" className={`font-sans-semibold ${isMe ? 'text-white/80' : 'text-brand-teal'}`}>
+                      {item.replyTo.senderName}
+                    </Text>
+                    <Text variant="caption" className={`${isMe ? 'text-white/70' : 'text-content-secondary dark:text-ink-dark-muted'}`} numberOfLines={2}>
+                      {item.replyTo.text}
+                    </Text>
+                  </View>
+                )}
+
+                {(item.sharedPost || item.postSnapshot) && (
+                  <PostShareBubble
+                    message={{
+                      id: item.id,
+                      senderId: item.senderId,
+                      type: 'post_share',
+                      postId: item.postId || item.sharedPost?.id || item.postSnapshot?.id || '',
+                      postSnapshot: {
+                        title: item.sharedPost?.title || item.postSnapshot?.title,
+                        content: item.sharedPost?.description || item.sharedPost?.content || item.postSnapshot?.content,
+                        authorName: item.sharedPost?.authorName || item.postSnapshot?.authorName,
+                        authorProfilePicture: item.sharedPost?.authorProfilePicture || item.postSnapshot?.authorProfilePicture || null,
+                        imageUrl: item.sharedPost?.image || item.postSnapshot?.imageUrl || null,
+                        isAnonymous: item.sharedPost?.isAnonymous || item.postSnapshot?.isAnonymous || false,
+                        type: item.sharedPost?.kind || item.sharedPost?.type || item.postSnapshot?.type,
+                      },
+                      text: item.text,
+                      createdAt: item.createdAt,
+                    }}
+                    isMine={isMe}
+                  />
+                )}
+
+                {item.image && (
+                  <TouchableOpacity onPress={() => onImagePress?.(item.image)} activeOpacity={0.9}>
+                    <Image source={{ uri: item.image }} className="w-48 h-48 rounded-lg mb-2" resizeMode="cover" />
+                    <View style={{ position: 'absolute', bottom: 10, right: 6, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 12, padding: 4 }}>
+                      <ZoomIn size={14} color="#fff" />
+                    </View>
+                  </TouchableOpacity>
+                )}
+
+                {item.text && !(item.sharedPost || item.postSnapshot) && (
+                  <Text variant="body" className={`${isMe ? 'text-white' : 'text-content dark:text-ink-dark'}`}>
+                    {item.text}
+                  </Text>
+                )}
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </Swipeable>
+
+      {!isDeleted && hasReactions && (
+        <View className="mb-2">
+          <ReactionBar
+            reactions={reactions}
+            currentUserId={user?.uid || ''}
+            onToggle={(emoji) => onReact(item.id, emoji)}
+            isDark={isDark}
+            isMe={isMe}
+          />
         </View>
       )}
-      onSwipeableOpen={(direction) => {
-        if (direction === 'left') {
-          setReplyingTo(item);
-          swipeableRef.current?.close();
-        }
-      }}
-    >
-      <View className={`flex-row mb-3 px-4 ${isMe ? 'justify-end' : 'justify-start'}`}>
-        <TouchableOpacity
-          onLongPress={() => handleMessageLongPress(item)}
-          delayLongPress={200}
-          activeOpacity={0.8}
-          className={`max-w-[80%] px-4 py-3 rounded-2xl ${
-            isMe
-              ? 'bg-brand-teal rounded-tr-sm'
-              : 'bg-surface dark:bg-surface-dark-elevated rounded-tl-sm'
-          }`}
-          style={!isMe ? { borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' } : undefined}
-        >
-        {isDeleted ? (
-          <Text variant="caption" className={`italic ${isMe ? 'text-white/60' : 'text-content-secondary dark:text-ink-dark-muted'}`}>
-            This message was deleted
-          </Text>
-        ) : (
-          <>
-            {item.replyTo && (
-              <View className={`mb-2 px-3 py-2 rounded-lg border-l-4 ${
-                isMe
-                  ? 'bg-black/10 border-white/50'
-                  : 'bg-surface-soft dark:bg-surface-dark-secondary border-brand-teal/50'
-              }`}>
-                <Text variant="caption" className={`font-sans-semibold ${isMe ? 'text-white/80' : 'text-brand-teal'}`}>
-                  {item.replyTo.senderName}
-                </Text>
-                <Text variant="caption" className={`${isMe ? 'text-white/70' : 'text-content-secondary dark:text-ink-dark-muted'}`} numberOfLines={2}>
-                  {item.replyTo.text}
-                </Text>
-              </View>
-            )}
-
-            {/* ↓ NEW: shared post/product bubble */}
-            {(item.sharedPost || item.postSnapshot) && (
-              <PostShareBubble
-                message={{
-                  id: item.id,
-                  senderId: item.senderId,
-                  type: 'post_share',
-                  postId: item.postId || item.sharedPost?.id || item.postSnapshot?.id || '',
-                  postSnapshot: {
-                    title: item.sharedPost?.title || item.postSnapshot?.title,
-                    content: item.sharedPost?.description || item.sharedPost?.content || item.postSnapshot?.content,
-                    authorName: item.sharedPost?.authorName || item.postSnapshot?.authorName,
-                    authorProfilePicture: item.sharedPost?.authorProfilePicture || item.postSnapshot?.authorProfilePicture || null,
-                    imageUrl: item.sharedPost?.image || item.postSnapshot?.imageUrl || null,
-                    isAnonymous: item.sharedPost?.isAnonymous || item.postSnapshot?.isAnonymous || false,
-                    type: item.sharedPost?.kind || item.sharedPost?.type || item.postSnapshot?.type,
-                  },
-                  text: item.text,
-                  createdAt: item.createdAt,
-                }}
-                isMine={isMe}
-              />
-            )}
-
-            {item.image && (
-              <TouchableOpacity onPress={() => onImagePress?.(item.image)} activeOpacity={0.9}>
-                <Image source={{ uri: item.image }} className="w-48 h-48 rounded-lg mb-2" resizeMode="cover" />
-                <View style={{ position: 'absolute', bottom: 10, right: 6, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 12, padding: 4 }}>
-                  <ZoomIn size={14} color="#fff" />
-                </View>
-              </TouchableOpacity>
-            )}
-            {item.text && !(item.sharedPost || item.postSnapshot) && (
-              <Text variant="body" className={`${isMe ? 'text-white' : 'text-content dark:text-ink-dark'}`}>
-                {item.text}
-              </Text>
-            )}
-          </>
-        )}
-        </TouchableOpacity>
-      </View>
-    </Swipeable>
+    </View>
   );
 };
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function ChatRoomScreen() {
   const { id: roomId } = useLocalSearchParams<{ id: string }>();
@@ -179,20 +423,24 @@ export default function ChatRoomScreen() {
   const [requestedBy, setRequestedBy] = useState<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
+  // Reaction picker state — includes anchor position
+  const [reactionPickerVisible, setReactionPickerVisible] = useState(false);
+  const [reactionTargetMsg, setReactionTargetMsg] = useState<Message | null>(null);
+  const [pickerAnchor, setPickerAnchor] = useState({ x: 0, y: 0 });
+
   const flatListRef = useRef<FlatList>(null);
 
-  // Android keyboard listener
+  // ── Keyboard listener (Android) ──────────────────────────────────────────────
   useEffect(() => {
     if (Platform.OS !== "android") return;
     const show = Keyboard.addListener("keyboardDidShow", (e) => {
       setKeyboardHeight(e.endCoordinates.height + 24);
     });
-    const hide = Keyboard.addListener("keyboardDidHide", () => {
-      setKeyboardHeight(0);
-    });
+    const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardHeight(0));
     return () => { show.remove(); hide.remove(); };
   }, []);
 
+  // ── Firestore setup ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user || !roomId) return;
 
@@ -233,7 +481,7 @@ export default function ChatRoomScreen() {
     clearNotifications();
 
     firestore().collection('chatRooms').doc(roomId).update({
-      unreadBy: firestore.FieldValue.arrayRemove(user.uid)
+      unreadBy: firestore.FieldValue.arrayRemove(user.uid),
     }).catch(() => {});
 
     const unsubscribe = firestore()
@@ -250,6 +498,77 @@ export default function ChatRoomScreen() {
     return () => unsubscribe();
   }, [roomId, user]);
 
+  // ── React to a message ────────────────────────────────────────────────────────
+  const handleReact = async (msgId: string, emoji: string) => {
+    if (!user || !roomId) return;
+    try {
+      const msgRef = firestore()
+        .collection('chatRooms').doc(roomId)
+        .collection('messages').doc(msgId);
+
+      const msgSnap = await msgRef.get();
+      const existing: Record<string, string[]> = msgSnap.data()?.reactions || {};
+      const currentUids: string[] = existing[emoji] || [];
+      const alreadyReacted = currentUids.includes(user.uid);
+
+      const updated = alreadyReacted
+        ? currentUids.filter(uid => uid !== user.uid)
+        : [...currentUids, user.uid];
+
+      // set+merge so this works on old messages that never had a reactions field.
+      // update() throws permission-denied when the field doesn't exist yet;
+      // set+merge creates it if absent, updates it if present — same security rule applies.
+      await msgRef.set(
+        { reactions: { ...existing, [emoji]: updated } },
+        { merge: true },
+      );
+    } catch (e) { console.error("React failed", e); }
+  };
+
+  // ── Single tap: measure bubble position → show anchored picker ────────────────
+  const handleMessagePress = (msg: Message, bubbleX: number, bubbleY: number, bubbleWidth: number) => {
+    if (msg.isDeletedForEveryone) return;
+
+    // Place picker above the bubble with a small gap
+    const pickerY = Math.max(60, bubbleY - PICKER_HEIGHT - 8);
+    // Centre picker over bubble, then clamp to screen edges
+    const centredX = bubbleX + bubbleWidth / 2 - PICKER_WIDTH / 2;
+
+    setPickerAnchor({ x: centredX, y: pickerY });
+    setReactionTargetMsg(msg);
+    setReactionPickerVisible(true);
+  };
+
+  // ── Long press: show more options action sheet ────────────────────────────────
+  const handleMessageLongPress = (msg: Message) => {
+    if (msg.isDeletedForEveryone) return;
+    showMoreOptions(msg);
+  };
+
+  const showMoreOptions = (msg: Message) => {
+    if (!msg) return;
+    const isMe = msg.senderId === user?.uid;
+
+    const actions: Array<{ text: string; style?: 'cancel' | 'destructive' | 'default'; onPress?: () => void }> = [
+      { text: "Reply", onPress: () => setReplyingTo(msg) },
+      { text: "Forward", onPress: () => openForwardModal(msg) },
+    ];
+    if (msg.text) actions.push({ text: "Copy", onPress: () => handleCopy(msg.text!) });
+    actions.push({ text: "Delete for me", style: "destructive", onPress: () => handleDeleteForMe(msg.id) });
+    if (isMe) {
+      actions.push({
+        text: "Delete for everyone", style: "destructive",
+        onPress: () => setTimeout(() => AppAlert.alert("Delete for everyone", "This cannot be undone.", [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: () => handleDeleteForEveryone(msg.id) },
+        ]), 300),
+      });
+    }
+    actions.push({ text: "Cancel", style: "cancel" });
+    AppAlert.alert("Message Options", undefined, actions);
+  };
+
+  // ── Send ─────────────────────────────────────────────────────────────────────
   const handleSend = async (text?: string, image?: string) => {
     if (!user || !roomId || (!text?.trim() && !image)) return;
 
@@ -267,14 +586,18 @@ export default function ChatRoomScreen() {
     setNewMessage("");
 
     try {
-      const msgData: any = { senderId: user.uid, createdAt: firestore.FieldValue.serverTimestamp() };
+      const msgData: any = {
+        senderId: user.uid,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        reactions: {},
+      };
       if (messageText) msgData.text = messageText;
       if (image) msgData.image = image;
       if (replyingTo) {
         msgData.replyTo = {
           id: replyingTo.id,
           text: replyingTo.text || (replyingTo.image ? '📷 Image' : ''),
-          senderName: replyingTo.senderId === user.uid ? 'You' : (otherUser?.name || 'Someone')
+          senderName: replyingTo.senderId === user.uid ? 'You' : (otherUser?.name || 'Someone'),
         };
       }
 
@@ -286,7 +609,7 @@ export default function ChatRoomScreen() {
         lastSenderId: user.uid,
         updatedAt: firestore.FieldValue.serverTimestamp(),
         unreadBy: otherUser?.id ? [otherUser.id] : [],
-        deletedBy: []
+        deletedBy: [],
       });
 
       if (otherUser?.id && otherUser.id !== user.uid) {
@@ -351,6 +674,7 @@ export default function ChatRoomScreen() {
         createdAt: firestore.FieldValue.serverTimestamp(),
         text: forwardingMessage.text,
         image: forwardingMessage.image,
+        reactions: {},
       };
       await firestore().collection('chatRooms').doc(targetRoomId).collection('messages').add(msgData);
       await firestore().collection('chatRooms').doc(targetRoomId).update({
@@ -363,47 +687,23 @@ export default function ChatRoomScreen() {
     finally { setShowForwardModal(false); setForwardingMessage(null); }
   };
 
-  const handleMessageLongPress = (msg: Message) => {
-    if (msg.isDeletedForEveryone) return;
-    const isMe = msg.senderId === user?.uid;
-
-    const actions: Array<{ text: string; style?: 'cancel' | 'destructive' | 'default'; onPress?: () => void }> = [
-      { text: "Reply", onPress: () => setReplyingTo(msg) },
-      { text: "Forward", onPress: () => openForwardModal(msg) },
-    ];
-    if (msg.text) actions.push({ text: "Copy", onPress: () => handleCopy(msg.text!) });
-    actions.push({ text: "Delete for me", style: "destructive", onPress: () => handleDeleteForMe(msg.id) });
-    if (isMe) {
-      actions.push({
-        text: "Delete for everyone", style: "destructive",
-      onPress: () => setTimeout(() => AppAlert.alert("Delete for everyone", "This cannot be undone.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => handleDeleteForEveryone(msg.id) }
-      ]), 300)
-    });
-  }
-    actions.push({ text: "Cancel", style: "cancel" });
-
-    AppAlert.alert("Message Options", undefined, actions);
-  };
-
   const handleClearChat = () => {
     setTimeout(() => {
-    AppAlert.alert("Clear Chat", "This will clear all messages for you only.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Clear", style: "destructive", onPress: async () => {
-          if (!user || !roomId) return;
-          try {
-            const msgsSnap = await firestore().collection('chatRooms').doc(roomId).collection('messages').get();
-            const batch = firestore().batch();
-            msgsSnap.docs.forEach(doc => batch.update(doc.ref, { deletedFor: firestore.FieldValue.arrayUnion(user.uid) }));
-            await batch.commit();
-            AppAlert.alert("Done", "Chat cleared for you.");
-          } catch (err) { AppAlert.alert("Error", "Failed to clear chat."); }
+      AppAlert.alert("Clear Chat", "This will clear all messages for you only.", [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear", style: "destructive", onPress: async () => {
+            if (!user || !roomId) return;
+            try {
+              const msgsSnap = await firestore().collection('chatRooms').doc(roomId).collection('messages').get();
+              const batch = firestore().batch();
+              msgsSnap.docs.forEach(doc => batch.update(doc.ref, { deletedFor: firestore.FieldValue.arrayUnion(user.uid) }));
+              await batch.commit();
+              AppAlert.alert("Done", "Chat cleared for you.");
+            } catch (err) { AppAlert.alert("Error", "Failed to clear chat."); }
+          },
         },
-      },
-    ]);
+      ]);
     }, 300);
   };
 
@@ -419,10 +719,10 @@ export default function ChatRoomScreen() {
         setIsMuted(true);
         AppAlert.alert("Muted", "You won't receive notifications from this chat.");
       }
-     } catch (err) {
-     console.error("Mute toggle failed", err);
-     AppAlert.alert("Error", "Failed to update notification settings.");
-   }
+    } catch (err) {
+      console.error("Mute toggle failed", err);
+      AppAlert.alert("Error", "Failed to update notification settings.");
+    }
   };
 
   const handleBlockUser = () => {
@@ -439,27 +739,26 @@ export default function ChatRoomScreen() {
         },
       },
     ]);
-  };  
+  };
+
   const handleUnblockUser = () => {
     if (!user || !otherUser?.id) return;
     setTimeout(() => {
-        AppAlert.alert("Unblock User", `Unblock ${otherUser.name || 'this user'}?`, [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Unblock",
-            onPress: async () => {
-              try {
-                await unblockUser(user.uid, otherUser.id);
-                AppAlert.alert("Unblocked", `${otherUser.name || 'User'} has been unblocked.`);
-              } catch (err) {
-                AppAlert.alert("Error", "Failed to unblock user.");
-              }
-            },
+      AppAlert.alert("Unblock User", `Unblock ${otherUser.name || 'this user'}?`, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Unblock", onPress: async () => {
+            try {
+              await unblockUser(user.uid, otherUser.id);
+              AppAlert.alert("Unblocked", `${otherUser.name || 'User'} has been unblocked.`);
+            } catch (err) { AppAlert.alert("Error", "Failed to unblock user."); }
           },
-        ]);
-      }, 300);
-    };
-    const showChatOptions = () => {
+        },
+      ]);
+    }, 300);
+  };
+
+  const showChatOptions = () => {
     AppAlert.alert("Chat Options", undefined, [
       { text: "Clear Chat", onPress: handleClearChat },
       { text: isMuted ? "Unmute Notifications" : "Mute Notifications", onPress: handleToggleMute },
@@ -477,7 +776,6 @@ export default function ChatRoomScreen() {
       mediaTypes: ['images'],
       quality: 0.8,
     });
-
     if (!result.canceled && result.assets[0].uri) {
       setIsUploading(true);
       try {
@@ -486,9 +784,7 @@ export default function ChatRoomScreen() {
       } catch (err) {
         console.error("Failed to upload image", err);
         AppAlert.alert("Upload Failed", "Could not upload image. Please try again.");
-      } finally {
-        setIsUploading(false);
-      }
+      } finally { setIsUploading(false); }
     }
   };
 
@@ -499,6 +795,16 @@ export default function ChatRoomScreen() {
       </SafeAreaView>
     );
   }
+
+  const chatBodyProps = {
+    isDark, roomId, messages, user, otherUser, flatListRef,
+    roomStatus, requestedBy, replyingTo, setReplyingTo,
+    newMessage, setNewMessage, isUploading, handleSend, pickImage,
+    onMessagePress: handleMessagePress,
+    onMessageLongPress: handleMessageLongPress,
+    borderColor, setRoomStatus, setRequestedBy,
+    onImagePress: setPreviewImage, onReact: handleReact,
+  };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -534,58 +840,32 @@ export default function ChatRoomScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* iOS: KeyboardAvoidingView | Android: manual paddingBottom */}
         {Platform.OS === 'ios' ? (
           <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-            <ChatBody
-              isDark={isDark}
-              roomId={roomId}
-              messages={messages}
-              user={user}
-              otherUser={otherUser}
-              flatListRef={flatListRef}
-              roomStatus={roomStatus}
-              requestedBy={requestedBy}
-              replyingTo={replyingTo}
-              setReplyingTo={setReplyingTo}
-              newMessage={newMessage}
-              setNewMessage={setNewMessage}
-              isUploading={isUploading}
-              handleSend={handleSend}
-              pickImage={pickImage}
-              handleMessageLongPress={handleMessageLongPress}
-              borderColor={borderColor}
-              setRoomStatus={setRoomStatus}
-              setRequestedBy={setRequestedBy}
-              onImagePress={setPreviewImage}
-            />
+            <ChatBody {...chatBodyProps} />
           </KeyboardAvoidingView>
         ) : (
           <View style={{ flex: 1, paddingBottom: keyboardHeight }}>
-            <ChatBody
-              isDark={isDark}
-              roomId={roomId}
-              messages={messages}
-              user={user}
-              otherUser={otherUser}
-              flatListRef={flatListRef}
-              roomStatus={roomStatus}
-              requestedBy={requestedBy}
-              replyingTo={replyingTo}
-              setReplyingTo={setReplyingTo}
-              newMessage={newMessage}
-              setNewMessage={setNewMessage}
-              isUploading={isUploading}
-              handleSend={handleSend}
-              pickImage={pickImage}
-              handleMessageLongPress={handleMessageLongPress}
-              borderColor={borderColor}
-              setRoomStatus={setRoomStatus}
-              setRequestedBy={setRequestedBy}
-              onImagePress={setPreviewImage}
-            />
+            <ChatBody {...chatBodyProps} />
           </View>
         )}
+
+        {/* ── Anchored Reaction Picker ── */}
+        <ReactionPicker
+          visible={reactionPickerVisible}
+          anchorX={pickerAnchor.x}
+          anchorY={pickerAnchor.y}
+          onClose={() => { setReactionPickerVisible(false); setReactionTargetMsg(null); }}
+          onReact={(emoji) => {
+            if (reactionTargetMsg) handleReact(reactionTargetMsg.id, emoji);
+          }}
+          onMoreOptions={() => {
+            if (reactionTargetMsg) showMoreOptions(reactionTargetMsg);
+          }}
+          isDark={isDark}
+          currentReactions={reactionTargetMsg?.reactions}
+          currentUserId={user?.uid}
+        />
 
         {/* Image Preview Modal */}
         <Modal
@@ -660,13 +940,14 @@ export default function ChatRoomScreen() {
   );
 }
 
-// Extracted inner body to avoid JSX duplication between iOS/Android branches
+// ─── Chat Body ────────────────────────────────────────────────────────────────
+
 function ChatBody({
   isDark, roomId, messages, user, otherUser, flatListRef,
   roomStatus, requestedBy, replyingTo, setReplyingTo,
   newMessage, setNewMessage, isUploading, handleSend, pickImage,
-  handleMessageLongPress, borderColor, setRoomStatus, setRequestedBy,
-  onImagePress,
+  onMessagePress, onMessageLongPress, borderColor, setRoomStatus, setRequestedBy,
+  onImagePress, onReact,
 }: any) {
   return (
     <>
@@ -686,9 +967,11 @@ function ChatBody({
               item={item}
               user={user}
               isDark={isDark}
-              handleMessageLongPress={handleMessageLongPress}
+              onMessagePress={onMessagePress}
+              onMessageLongPress={onMessageLongPress}
               setReplyingTo={setReplyingTo}
               onImagePress={onImagePress}
+              onReact={onReact}
             />
           )}
           inverted={true}
@@ -724,8 +1007,8 @@ function ChatBody({
                           await batch.commit();
                           router.back();
                         } catch (err) { console.error('Decline failed', err); }
-                      }
-                    }
+                      },
+                    },
                   ]);
                 }}
                 className="px-6 py-2 rounded-full"

@@ -208,6 +208,7 @@ service cloud.firestore {
         && existing().get('status', '') == 'pending';
 
       match /messages/{messageId} {
+        allow get: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chatRooms/$(roomId)).data.participants;
         allow list: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chatRooms/$(roomId)).data.participants;
         allow create: if isVerified() 
           && isValidId(messageId)
