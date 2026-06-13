@@ -33,6 +33,7 @@ import {
 } from "lucide-react-native";
 import { toggleUpvote, toggleSavePost } from "@/lib/social";
 import PollDisplay from "@/components/ui/PollDisplay";
+import ShareToChatModal from '@/components/ui/ShareToChatModal';
 
 interface Reply {
   id: string;
@@ -91,7 +92,7 @@ export default function PostDetailScreen() {
   const { isDark } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
-
+  const [shareModalOpen, setShareModalOpen] = useState(false);
   const inputBg        = isDark ? "#2C2C2E" : "#F5F5F7";
   const inputText      = isDark ? "#F5F5F7" : "#1A1A1C";
   const placeholderClr = isDark ? "#636366" : "#8E8E93";
@@ -763,7 +764,7 @@ export default function PostDetailScreen() {
                   {replies.length}
                 </Text>
               </View>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => setShareModalOpen(true)}>
                 <Share2 size={22} color="#8E8E93" />
               </TouchableOpacity>
             </View>
@@ -933,6 +934,11 @@ export default function PostDetailScreen() {
           </TouchableOpacity>
         </View>
       </View>
+      <ShareToChatModal
+        visible={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        post={post}
+      />
     </>
   );
 

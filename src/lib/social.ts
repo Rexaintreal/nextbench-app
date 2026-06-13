@@ -178,3 +178,70 @@ export async function getOrCreateDMRoom(
 
   return { roomId: newRoom.id, isPending };
 }
+
+export async function sendPostToChat(
+  roomId: string,
+  senderId: string,
+  post: {
+    id: string;
+    title?: string;
+    content?: string;
+    authorName?: string;
+    authorId?: string;
+    authorProfilePicture?: string | null;
+    imageUrl?: string;
+    imageUrls?: string[];
+    isAnonymous?: boolean;
+    type?: string;
+  },
+  text?: string
+): Promise<void> {
+  const roomRef = firestore().collection('chatRooms').doc(roomId);
+
+  const roomSnap = await roomRef.get();
+  const roomData = roomSnap.data();
+  const otherUserId = roomData?.participants?.find((id: string) => id !== senderId);
+
+  const isProduct = post.type === 'product';
+  const sharedPost: Record<string, any> = {
+    id: post.id,
+    title: post.title || '',
+    description: isProduct
+      ? post.content || ''   // content holds "₹price · condition · category"
+      : post.content || '',
+    authorName: post.isAnonymous ? 'Anonymous' : (post.authorName || ''),
+    kind: isProduct ? 'product' : 'post',
+  };
+  const imageUrl = post.imageUrls?.[0] || post.imageUrl || null;
+  if (imageUrl) sharedPost.image = imageUrl;
+  
+  const batch = firestore().batch();
+
+  // 1. Write the message document
+  const msgRef = roomRef.collection('messages').doc();
+  const msgData: Record<string, any> = {
+    senderId,
+    sharedPost,
+    createdAt: firestore.FieldValue.serverTimestamp(),
+  };
+  if (text?.trim()) msgData.text = text.trim();
+
+  batch.set(msgRef, msgData);
+
+  // 2. Update the chatRoom preview
+  const lastMessageText = text?.trim()
+    ? text.trim()
+    : `Shared a post${post.title ? `: ${post.title}` : ''}`;
+
+  batch.update(roomRef, {
+    lastMessage: lastMessageText,
+    lastSenderId: senderId,
+    updatedAt: firestore.FieldValue.serverTimestamp(),
+    ...(otherUserId
+      ? { unreadBy: firestore.FieldValue.arrayUnion(otherUserId) }
+      : {}),
+    deletedBy: firestore.FieldValue.arrayRemove(otherUserId || ''),
+  });
+
+  await batch.commit();
+}

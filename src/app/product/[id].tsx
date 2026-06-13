@@ -9,6 +9,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { Product } from "@/components/ui/ProductCard";
 import firestore from "@react-native-firebase/firestore";
 import { toggleWishlist, getOrCreateDMRoom } from "@/lib/social";
+import ShareToChatModal from '@/components/ui/ShareToChatModal';
 
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -18,7 +19,7 @@ export default function ProductDetailScreen() {
   const iconColor   = isDark ? "#F5F5F7" : "#1D1D1F";
   const borderColor = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
   const headerBg    = isDark ? "rgba(0,0,0,0.88)" : "rgba(255,255,255,0.95)";
-
+  const [shareModalOpen, setShareModalOpen] = useState(false);
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [isWishlisted, setIsWishlisted] = useState(false);
@@ -184,6 +185,7 @@ export default function ProductDetailScreen() {
             <TouchableOpacity
               className="p-3 rounded-xl items-center justify-center flex-1 flex-row gap-2 bg-surface-soft dark:bg-surface-dark-elevated"
               style={{ borderWidth: 1, borderColor }}
+              onPress={() => setShareModalOpen(true)}
             >
               <Share2 size={20} color="#8E8E93" />
               <Text variant="label" className="text-content-secondary dark:text-ink-dark-muted font-sans-semibold">
@@ -264,6 +266,28 @@ export default function ProductDetailScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+      {/* Share Modal */}
+      <ShareToChatModal
+        visible={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        post={{
+          id: product.id,
+          title: product.title,
+          content: product.description || `₹${product.price} · ${product.condition} · ${product.category}`,
+          authorId: product.sellerId,
+          authorName: product.sellerName,
+          authorProfilePicture: null,
+          isAnonymous: false,
+          school: product.sellerSchool,
+          type: 'product',
+          imageUrl: product.image,
+          imageUrls: [product.image],
+          upvotesCount: 0,
+          repliesCount: 0,
+          city: product.city,
+          createdAt: product.createdAt,
+        } as any}
+      />
     </SafeAreaView>
   );
 }

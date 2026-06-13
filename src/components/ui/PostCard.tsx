@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, TouchableOpacity, Image } from 'react-native';
+import ShareToChatModal from '@/components/ui/ShareToChatModal';
 import { router } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { Heart, MessageCircle, Share2, Bookmark, Flame } from 'lucide-react-native';
@@ -56,6 +57,7 @@ function timeAgo(date: any): string {
 export default function PostCard({ post, hasUpvoted, isSaved, onPress, onUpvote, onToggleSave, onAuthorPress }: PostCardProps) {
   const { isDark } = useTheme();
   const inputBg = isDark ? '#2C2C2E' : '#F5F5F7';
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
   const postImageUrls = post.imageUrls && post.imageUrls.length > 0
     ? post.imageUrls
@@ -173,7 +175,7 @@ export default function PostCard({ post, hasUpvoted, isSaved, onPress, onUpvote,
                 {post.repliesCount || 0}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity onPress={() => setShareModalOpen(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Share2 size={20} color="#8E8E93" />
             </TouchableOpacity>
           </View>
@@ -188,6 +190,11 @@ export default function PostCard({ post, hasUpvoted, isSaved, onPress, onUpvote,
         </View>
       </TouchableOpacity>
       <View className="h-[0.5px] bg-border dark:bg-border mx-5" style={{ backgroundColor: 'rgba(0,0,0,0.06)' }} />
+      <ShareToChatModal
+        visible={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        post={post}
+      />
     </View>
   );
 }

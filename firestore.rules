@@ -177,10 +177,11 @@ service cloud.firestore {
 
     function isValidMessage(data) {
       return data.keys().hasAll(['senderId', 'createdAt'])
-        && (data.keys().hasAny(['text', 'image', 'sharedPost']))
+        && (data.keys().hasAny(['text', 'image', 'sharedPost', 'postId']))
         && (!data.keys().hasAny(['text']) || (data.text is string && data.text.size() <= 2000))
         && (!data.keys().hasAny(['image']) || (data.image is string && data.image.size() <= 2000))
-        && (!data.keys().hasAny(['sharedPost']) || (data.sharedPost is map));
+        && (!data.keys().hasAny(['sharedPost']) || (data.sharedPost is map))
+        && (!data.keys().hasAny(['postId']) || (data.postId is string));
     }
 
     match /chatRooms/{roomId} {
