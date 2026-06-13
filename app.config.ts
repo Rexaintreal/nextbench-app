@@ -33,6 +33,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     "@react-native-firebase/auth",
     "@react-native-google-signin/google-signin",
     [
+      "expo-notifications",
+      {
+        icon: "./assets/images/notification-icon.png",
+        color: "#14B8A6",
+        androidMode: "default",
+      },
+    ],
+    [
       "expo-build-properties",
       {
         android: {
