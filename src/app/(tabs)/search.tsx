@@ -45,6 +45,13 @@ import { ScoredPost, formatRelativeTime } from "@/lib/trending";
 
 type SearchTab = "all" | "users" | "clubs" | "posts" | "products";
 
+// Strip emoji and any leading whitespace from a label, leaving plain text
+function stripEmoji(label: string): string {
+  return label
+    .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\uFE0F]/gu, "")
+    .trim();
+}
+
 // ─── Trending Post Item ─────────────────────────────────────
 function TrendingPostItem({ post, index, onPress }: { post: ScoredPost; index: number; onPress: () => void }) {
   const colorScheme = useColorScheme();
@@ -100,7 +107,7 @@ function TrendingPostItem({ post, index, onPress }: { post: ScoredPost; index: n
           {post.trendLabel && label && (
             <View className="px-2 py-0.5 rounded-md" style={{ backgroundColor: label.bg }}>
               <Text variant="caption" className="text-[10px] font-sans-semibold" style={{ color: label.color }}>
-                {post.trendLabel}
+                {stripEmoji(post.trendLabel)}
               </Text>
             </View>
           )}
@@ -131,6 +138,26 @@ export default function SearchScreen() {
   const { schoolTrending, cityTrending, trendingProduct, activeToday, loading: trendingLoading } = useTrending();
   const [trendingTab, setTrendingTab] = useState<'school' | 'city'>('school');
   const currentTrending = trendingTab === 'school' ? schoolTrending : cityTrending;
+
+  // User's upvoted post ids (for accurate hasUpvoted state in search results)
+  const [upvotedPostIds, setUpvotedPostIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!user) {
+      setUpvotedPostIds(new Set());
+      return;
+    }
+    const unsub = firestore()
+      .collection('post_upvotes')
+      .where('userId', '==', user.uid)
+      .onSnapshot(snap => {
+        if (!snap) return;
+        const ids = new Set<string>();
+        snap.forEach(d => ids.add(d.data().postId));
+        setUpvotedPostIds(ids);
+      });
+    return () => unsub();
+  }, [user]);
 
   // Suggestion cache
   const [suggestionsFetched, setSuggestionsFetched] = useState(false);
@@ -538,7 +565,7 @@ export default function SearchScreen() {
                   </View>
                   <View className="flex-1">
                     <Text variant="caption" className="text-brand-teal font-sans-semibold text-[11px] mb-0.5">
-                      🛍️ Hot Product
+                      Hot Product
                     </Text>
                     <Text variant="label" className="font-sans-semibold" numberOfLines={1}>
                       {trendingProduct.title}
@@ -799,7 +826,7 @@ export default function SearchScreen() {
                         <PostCard
                           key={`search-post-${p.id}`}
                           post={p as Post}
-                          hasUpvoted={false}
+                          hasUpvoted={upvotedPostIds.has(p.id)}
                           onPress={() => router.push(`/post/${p.id}` as any)}
                         />
                       )
