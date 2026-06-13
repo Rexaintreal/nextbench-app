@@ -30,6 +30,7 @@ import { QueryProvider } from "@/providers/QueryProvider";
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
 import { ThemeProvider, useTheme } from "@/providers/ThemeProvider";
 import { AlertProvider } from '@/components/ui/AppAlert';
+import { usePresence } from "@/lib/presence";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -38,6 +39,9 @@ function RootLayoutNav() {
   const { isDark } = useTheme();
   const segments = useSegments();
   const router = useRouter();
+
+  // Mirror web presence — writes users/{uid}.online + lastSeen
+  usePresence(user?.uid);
 
   // Auth-based navigation
   useEffect(() => {
