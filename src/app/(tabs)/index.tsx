@@ -45,6 +45,12 @@ export default function FeedScreen() {
   // Unread non-message notifications → bell badge
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
+  // Pagination — grow limits as user scrolls
+  const [postsLimit, setPostsLimit] = useState(15);
+  const [productsLimit, setProductsLimit] = useState(15);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadMoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!user) { setUnreadNotifCount(0); return; }
     const unsub = firestore()
@@ -69,6 +75,8 @@ export default function FeedScreen() {
     const unsubscribe = firestore()
       .collection('posts')
       .where('status', '==', 'approved')
+      .orderBy('createdAt', 'desc')
+      .limit(postsLimit)
       .onSnapshot(async (snapshot) => {
         if (!snapshot) return;
         try {
@@ -109,13 +117,13 @@ export default function FeedScreen() {
       });
 
     return () => unsubscribe();
-  }, []);
-
-  // Listen to products
+  }, [postsLimit]);
   useEffect(() => {
     const unsubscribe = firestore()
       .collection('products')
       .where('status', 'in', ['available', 'sold'])
+      .orderBy('createdAt', 'desc')
+      .limit(productsLimit)
       .onSnapshot((snapshot) => {
         if (!snapshot) return;
         try {
@@ -138,7 +146,7 @@ export default function FeedScreen() {
       });
 
     return () => unsubscribe();
-  }, []);
+  }, [productsLimit]);
 
   // Listen to user's upvotes
   useEffect(() => {
@@ -355,6 +363,15 @@ export default function FeedScreen() {
     flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
     setRefreshing(false);
   }, [feedItems, pillAnim]);
+
+  const handleEndReached = useCallback(() => {
+    if (loadingMore || loadingPosts || loadingProducts) return;
+    setLoadingMore(true);
+    setPostsLimit(prev => prev + 15);
+    setProductsLimit(prev => prev + 15);
+    if (loadMoreTimerRef.current) clearTimeout(loadMoreTimerRef.current);
+    loadMoreTimerRef.current = setTimeout(() => setLoadingMore(false), 1000);
+  }, [loadingMore, loadingPosts, loadingProducts]);
 
   const handleUpvote = (post: Post) => {
     if (!user) { Alert.alert('Sign In Required', 'You need to sign in to upvote posts.'); return; }
@@ -627,6 +644,15 @@ export default function FeedScreen() {
             }
             contentContainerStyle={{ paddingBottom: 120 }}
             showsVerticalScrollIndicator={false}
+            onEndReached={handleEndReached}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={
+              loadingMore ? (
+                <View className="px-5 pt-2">
+                  <FeedSkeleton />
+                </View>
+              ) : null
+            }
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#14B8A6" />
             }
