@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from "react";
 import {
+  Modal,
   View,
   ScrollView,
   TouchableOpacity,
@@ -23,7 +24,7 @@ import { AppAlert } from "@/components/ui/AppAlert";
 import {
   ChevronLeft, ShieldCheck, MapPin, Grid,
   MessageSquare, MoreHorizontal, UserPlus,
-  UserMinus, Ban, Camera,
+  UserMinus, Ban, Camera,X
 } from "lucide-react-native";
 import firestore from "@react-native-firebase/firestore";
 import * as ImagePicker from "expo-image-picker";
@@ -55,6 +56,9 @@ export default function OtherProfileScreen() {
   const [loadingListings, setLoadingListings] = useState(true);
   const [loadingPosts, setLoadingPosts]       = useState(true);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [modalType, setModalType] = useState<"followers" | "following" | null>(null);
+  const [modalUsers, setModalUsers] = useState<any[]>([]);
+  const [modalLoading, setModalLoading] = useState(false);
 
   // Cover photo state
   const [isUploadingCover, setIsUploadingCover] = useState(false);
@@ -95,7 +99,20 @@ export default function OtherProfileScreen() {
       }, (err) => { console.error(err); setLoadingPosts(false); });
     return () => unsub();
   }, [profileId]);
-
+  const fetchUsersList = async (type: "followers" | "following") => {
+    if (!profileId) return;
+    setModalLoading(true); setModalType(type); setModalUsers([]);
+    try {
+      const snap = await firestore().collection("follows")
+        .where(type === "followers" ? "followingId" : "followerId", "==", profileId).get();
+      const ids = snap.docs.map(d => type === "followers" ? d.data().followerId : d.data().followingId);
+      if (ids.length > 0) {
+        const userSnaps = await Promise.all(ids.slice(0, 50).map(id => firestore().collection("users").doc(id).get()));
+        setModalUsers(userSnaps.map(d => ({ id: d.id, ...d.data() })));
+      }
+    } catch (e) { console.error(e); }
+    finally { setModalLoading(false); }
+  };
   // ── Cover photo upload ───────────────────────────────────────────────────────
   const handleEditCover = async () => {
     if (!isOwnProfile || !user) return;
@@ -507,14 +524,14 @@ export default function OtherProfileScreen() {
             {/* Stats */}
             <View className="flex-row gap-6">
               {[
-                { label: "Followers", value: followersCount },
-                { label: "Following", value: followingCount },
+                { label: "Followers", value: followersCount, onPress: () => fetchUsersList("followers") },
+                { label: "Following", value: followingCount, onPress: () => fetchUsersList("following") },
                 { label: "Listings",  value: listings.length },
-              ].map(({ label, value }) => (
-                <View key={label} className="items-center">
+              ].map(({ label, value, onPress }) => (
+                <TouchableOpacity key={label} onPress={onPress} activeOpacity={onPress ? 0.6 : 1} className="items-center">
                   <Text variant="h3" className="dark:text-ink-dark">{value}</Text>
                   <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted">{label}</Text>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           </View>
@@ -626,6 +643,50 @@ export default function OtherProfileScreen() {
           contentId={profileId}
         />
       )}
+      <Modal visible={modalType !== null} transparent animationType="slide" onRequestClose={() => setModalType(null)}>
+      <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.50)" }}>
+        <View style={{ backgroundColor: surfaceBg, height: "80%", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <Text variant="h2" style={{ fontSize: 20 }}>{modalType === "followers" ? "Followers" : "Following"}</Text>
+            <TouchableOpacity onPress={() => setModalType(null)} style={{ padding: 8, backgroundColor: isDark ? "#2C2C2E" : "#F5F5F7", borderRadius: 999 }}>
+              <X size={18} color={iconColor} />
+            </TouchableOpacity>
+          </View>
+          {modalLoading
+            ? <ActivityIndicator color="#14B8A6" style={{ marginTop: 32 }} />
+            : modalUsers.length === 0
+              ? <View style={{ alignItems: "center", paddingTop: 48 }}>
+                  <Text variant="caption" className="text-content-tertiary">
+                    {modalType === "followers" ? "No followers yet." : "Not following anyone yet."}
+                  </Text>
+                </View>
+              : <ScrollView showsVerticalScrollIndicator={false}>
+                  {modalUsers.map(u => (
+                    <TouchableOpacity
+                      key={u.id}
+                      onPress={() => { setModalType(null); router.push(`/profile/${u.id}` as any); }}
+                      style={{ flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: borderColor }}
+                    >
+                      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? "#2C2C2E" : "#F5F5F7", alignItems: "center", justifyContent: "center", marginRight: 12, overflow: "hidden" }}>
+                        {u.profilePicture
+                          ? <Image source={{ uri: u.profilePicture }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+                          : <Text variant="h4" className="text-content-secondary">{u.name?.[0]?.toUpperCase() || "?"}</Text>
+                        }
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                          <Text variant="label" style={{ fontFamily: "Inter_600SemiBold" }}>{u.name}</Text>
+                          {u.verified && <ShieldCheck size={13} color="#14B8A6" />}
+                        </View>
+                        {u.username && <Text variant="caption" className="text-content-tertiary">@{u.username}</Text>}
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+          }
+        </View>
+      </View>
+    </Modal>
     </SafeAreaView>
   );
 }
