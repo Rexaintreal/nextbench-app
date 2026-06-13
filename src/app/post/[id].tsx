@@ -98,6 +98,7 @@ export default function PostDetailScreen() {
   const placeholderClr = isDark ? "#636366" : "#8E8E93";
   const borderClr      = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
   const iconColor      = isDark ? "#F5F5F7" : "#1A1A1C";
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'top'>('newest');
 
   const [post, setPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -114,7 +115,10 @@ export default function PostDetailScreen() {
     timer: null,
     baseline: false,
   });
-
+  const getLikeCount = (reply: Reply) => {
+    const opt = optimisticReplyUpvotes[reply.id];
+    return opt ? opt.count : (reply.upvotesCount || 0);
+  };
   // Reply-level upvote state
   // upvotedReplyIds: set of replyIds the current user has upvoted (from Firestore)
   const [upvotedReplyIds, setUpvotedReplyIds] = useState<Set<string>>(new Set());
@@ -449,7 +453,16 @@ export default function PostDetailScreen() {
     });
     return map;
   }, [replies]);
-
+  const sortedRootReplies = useMemo(() => {
+    const root = [...(repliesMap["root"] || [])];
+    if (sortBy === 'top') {
+      return root.sort((a, b) => getLikeCount(b) - getLikeCount(a));
+    }
+    if (sortBy === 'oldest') {
+      return root.sort((a, b) => (a.createdAt?.toDate?.()?.getTime() || 0) - (b.createdAt?.toDate?.()?.getTime() || 0));
+    }
+    return root.sort((a, b) => (b.createdAt?.toDate?.()?.getTime() || 0) - (a.createdAt?.toDate?.()?.getTime() || 0));
+  }, [repliesMap, sortBy, optimisticReplyUpvotes]);
   const renderCommentNode = (reply: Reply, level = 0) => {
     const children = repliesMap[reply.id] || [];
     const isIndented = level > 0;
@@ -780,9 +793,36 @@ export default function PostDetailScreen() {
 
         {/* Comments */}
         <View className="px-5 pt-4">
-          <Text variant="h4" className="mb-4 dark:text-ink-dark">
+        <View className="flex-row items-center justify-between mb-4">
+          <Text variant="h4" className="dark:text-ink-dark">
             Comments ({replies.length})
           </Text>
+          <View className="flex-row rounded-full overflow-hidden" style={{ backgroundColor: inputBg }}>
+            {(['newest', 'top', 'oldest'] as const).map((opt) => (
+              <TouchableOpacity
+                key={opt}
+                onPress={() => setSortBy(opt)}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 999,
+                  backgroundColor: sortBy === opt ? '#14B8A6' : 'transparent',
+                }}
+              >
+                <Text
+                  variant="caption"
+                  style={{
+                    fontFamily: 'Inter_600SemiBold',
+                    color: sortBy === opt ? '#fff' : (isDark ? '#98989D' : '#636366'),
+                    textTransform: 'capitalize',
+                  }}
+                >
+                  {opt === 'top' ? 'Top' : opt}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
           {replies.length === 0 ? (
             <View className="items-center py-8">
               <MessageCircle size={32} color={isDark ? "#3A3A3C" : "#E5E5EA"} />
@@ -794,7 +834,7 @@ export default function PostDetailScreen() {
               </Text>
             </View>
           ) : (
-            (repliesMap["root"] || []).map((reply) => renderCommentNode(reply, 0))
+            sortedRootReplies.map((reply) => renderCommentNode(reply, 0))
           )}
         </View>
       </ScrollView>
