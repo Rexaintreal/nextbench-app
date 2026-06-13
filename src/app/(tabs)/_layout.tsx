@@ -6,6 +6,7 @@ import Animated, { useAnimatedStyle, withSpring, withSequence, useSharedValue, w
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/providers/AuthProvider";
 import firestore from "@react-native-firebase/firestore";
+import { isChatMessageNotification } from "@/lib/notifications";
 
 const AnimatedIcon = ({ focused, IconComponent, activeColor, iconColor, size = 24 }: any) => {
   const scale = useSharedValue(1);
@@ -41,7 +42,7 @@ export default function TabLayout() {
   const iconColor = isDark ? "#8E8E93" : "#8E8E93";
   const activeColor = isDark ? "#2DD4BF" : "#14B8A6";
 
-  // Only new_message notifications → badge on Messages tab + toast
+  // Only true chat-thread message notifications → badge on Messages tab + toast
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [toastMessage, setToastMessage] = useState<{title: string, message: string, link: string} | null>(null);
   const toastY = useSharedValue(-150);
@@ -59,12 +60,17 @@ export default function TabLayout() {
       .where("read", "==", false)
       .where("type", "==", "new_message")
       .onSnapshot((snap) => {
-        setUnreadMessageCount(snap.size);
+        // Only count notifications that link to an actual chat thread —
+        // comment/reply notifications also use type "new_message" but
+        // link to a post, and those belong on the bell icon instead.
+        const chatDocs = snap.docs.filter(d => isChatMessageNotification(d.data() as any));
+        setUnreadMessageCount(chatDocs.length);
 
         if (!initialLoad) {
           snap.docChanges().forEach((change) => {
             if (change.type === "added") {
               const data = change.doc.data();
+              if (!isChatMessageNotification(data as any)) return;
               if (data.link !== pathname) {
                 setToastMessage({
                   title: data.title || "New Message",
