@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, ScrollView, ActivityIndicator, Image, TouchableOpacity, useColorScheme } from "react-native";
+import { View, ScrollView, ActivityIndicator, TouchableOpacity, useColorScheme } from "react-native";
 import { AppAlert } from '@/components/ui/AppAlert';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
@@ -10,6 +10,7 @@ import { Product } from "@/components/ui/ProductCard";
 import firestore from "@react-native-firebase/firestore";
 import { toggleWishlist, getOrCreateDMRoom } from "@/lib/social";
 import ShareToChatModal from '@/components/ui/ShareToChatModal';
+import { ImageSlider } from '@/components/ui/ImageSlider';
 
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -92,6 +93,12 @@ export default function ProductDetailScreen() {
   const isSold     = product.status === "sold";
   const isReserved = product.status === "reserved";
   const isOwner    = user?.uid === product.sellerId;
+  const productImageUrls = (product as any).images && (product as any).images.length > 0
+    ? (product as any).images
+    : ((product as any).imageUrls && (product as any).imageUrls.length > 0
+      ? (product as any).imageUrls
+      : (product.image ? [product.image] : []));
+  const sliderBg = isDark ? '#2C2C2E' : '#F5F5F7';
 
   return (
     <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={["top"]}>
@@ -117,10 +124,10 @@ export default function ProductDetailScreen() {
         contentContainerStyle={{ paddingBottom: 120 }}
       >
         {/* Image */}
-        <View className="w-full aspect-square bg-surface-soft dark:bg-surface-dark-secondary relative">
-          <Image source={{ uri: product.image }} className="w-full h-full" resizeMode="contain" />
+        <View className="w-full px-5 pt-5 relative">
+          <ImageSlider urls={productImageUrls} inputBg={sliderBg} isDark={isDark} />
           {isSold && (
-            <View className="absolute inset-0 bg-black/40 items-center justify-center">
+            <View className="absolute inset-0 bg-black/40 items-center justify-center rounded-xl" pointerEvents="none">
               <View className="bg-black/70 px-8 py-3 rounded-full">
                 <Text variant="label" className="text-white font-sans-bold uppercase tracking-widest">
                   Sold
@@ -129,7 +136,7 @@ export default function ProductDetailScreen() {
             </View>
           )}
           {isReserved && !isSold && (
-            <View className="absolute top-4 right-4 bg-amber-500 px-4 py-2 rounded-full">
+            <View className="absolute top-8 right-8 bg-amber-500 px-4 py-2 rounded-full z-10">
               <Text variant="caption" className="text-white font-sans-semibold uppercase tracking-widest">
                 Reserved
               </Text>
@@ -281,7 +288,7 @@ export default function ProductDetailScreen() {
           school: product.sellerSchool,
           type: 'product',
           imageUrl: product.image,
-          imageUrls: [product.image],
+          imageUrls: productImageUrls,
           upvotesCount: 0,
           repliesCount: 0,
           city: product.city,
