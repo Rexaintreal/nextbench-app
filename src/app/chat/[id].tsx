@@ -644,7 +644,10 @@ export default function ChatRoomScreen() {
     } catch (e) { console.error("Delete for everyone failed", e); }
   };
 
-  const handleCopy = async (text: string) => { await Clipboard.setStringAsync(text); };
+  const handleCopy = async (text: string) => {
+    await Clipboard.setStringAsync(text);
+    AppAlert.alert("Copied", "Message copied to clipboard.");
+  };
 
   const fetchChatsForForwarding = async () => {
     if (!user) return;
@@ -653,8 +656,25 @@ export default function ChatRoomScreen() {
       const snap = await firestore().collection('chatRooms')
         .where('participants', 'array-contains', user.uid)
         .orderBy('updatedAt', 'desc').limit(20).get();
+
       const chats: any[] = [];
-      snap.forEach(doc => chats.push({ id: doc.id, ...doc.data() }));
+      for (const doc of snap.docs) {
+        if (doc.id === roomId) continue;
+        const data = doc.data();
+        const otherId = (data.participants || []).find((id: string) => id !== user.uid);
+        let otherUserData: any = null;
+        if (otherId) {
+          const userDoc = await firestore().collection('users').doc(otherId).get();
+          if (userDoc.exists()) otherUserData = userDoc.data();
+        }
+        chats.push({
+          id: doc.id,
+          ...data,
+          otherUser: otherUserData
+            ? { id: otherId, name: otherUserData.name, profilePicture: otherUserData.profilePicture }
+            : null,
+        });
+      }
       setForwardChats(chats);
     } catch (e) { console.error("Fetch chats failed", e); }
     finally { setLoadingChats(false); }
@@ -672,10 +692,11 @@ export default function ChatRoomScreen() {
       const msgData: any = {
         senderId: user.uid,
         createdAt: firestore.FieldValue.serverTimestamp(),
-        text: forwardingMessage.text,
-        image: forwardingMessage.image,
         reactions: {},
       };
+      if (forwardingMessage.text) msgData.text = forwardingMessage.text;
+      if (forwardingMessage.image) msgData.image = forwardingMessage.image;
+
       await firestore().collection('chatRooms').doc(targetRoomId).collection('messages').add(msgData);
       await firestore().collection('chatRooms').doc(targetRoomId).update({
         lastMessage: msgData.image ? '📷 Image' : msgData.text,
@@ -919,10 +940,16 @@ export default function ChatRoomScreen() {
                       style={{ borderBottomWidth: 1, borderBottomColor: borderColor }}
                     >
                       <View className="flex-row items-center">
-                        <View className="w-12 h-12 rounded-full bg-surface-soft dark:bg-surface-dark-secondary items-center justify-center mr-3">
-                          <User size={20} color="#8E8E93" />
+                        <View className="w-12 h-12 rounded-full bg-surface-soft dark:bg-surface-dark-secondary items-center justify-center mr-3 overflow-hidden">
+                          {chat.otherUser?.profilePicture ? (
+                            <Image source={{ uri: chat.otherUser.profilePicture }} className="w-full h-full" resizeMode="cover" />
+                          ) : (
+                            <User size={20} color="#8E8E93" />
+                          )}
                         </View>
-                        <Text variant="label" className="font-sans-semibold dark:text-ink-dark">Forward to chat</Text>
+                        <Text variant="label" className="font-sans-semibold dark:text-ink-dark">
+                          {chat.otherUser?.name || 'Unknown'}
+                        </Text>
                       </View>
                       <View className="bg-brand-teal px-4 py-2 rounded-full">
                         <Text variant="caption" className="text-white font-sans-semibold text-[12px]">Send</Text>
