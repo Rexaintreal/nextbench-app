@@ -613,7 +613,7 @@ export default function ChatRoomScreen() {
       });
 
       if (otherUser?.id && otherUser.id !== user.uid) {
-        const roomSnap = await firestore().collection('chatRooms').doc(roomId).get();
+        const roomSnap = await firestore().collection('chatRooms').doc(roomId).get({ source: 'server' });
         const roomMutedBy: string[] = roomSnap.data()?.mutedBy || [];
         if (!roomMutedBy.includes(otherUser.id)) {
           createNotification({
