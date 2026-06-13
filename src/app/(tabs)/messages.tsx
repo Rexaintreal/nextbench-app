@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Alert, View, FlatList, ActivityIndicator, TouchableOpacity, Image, TextInput, useColorScheme } from "react-native";
+import { View, FlatList, ActivityIndicator, TouchableOpacity, Image, TextInput, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import { MessageSquare, Pin, Search, User } from "lucide-react-native";
 import firestore from "@react-native-firebase/firestore";
+import { AppAlert } from '@/components/ui/AppAlert';
 
 interface ChatRoom {
   id: string;
@@ -168,7 +169,7 @@ export default function MessagesScreen() {
           style: 'destructive' as const,
           onPress: () => {
             setTimeout(() => {
-              Alert.alert('Delete Chat', 'This removes the chat from your list. The other person can still see it.', [
+              AppAlert.alert('Delete Chat', 'This removes the chat from your list. The other person can still see it.', [
                 { text: 'Cancel', style: 'cancel' },
                 {
                   text: 'Delete', style: 'destructive', onPress: async () => {
@@ -186,7 +187,7 @@ export default function MessagesScreen() {
         },
         { text: 'Cancel', style: 'cancel' as const },
       ];
-      Alert.alert(item.otherUser?.name || 'Chat Options', undefined, actions);
+      AppAlert.alert(item.otherUser?.name || 'Chat Options', undefined, actions);
     };
 
     return (
