@@ -1,9 +1,15 @@
-// lib/scheduleEngagementNotifications.ts
 import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
-// {name} gets replaced with the user's first name at schedule time
+const CHANNEL_ID = "engagement";
+const STORAGE_KEY = "engagement_notif_ids";
+const LAST_SCHEDULED_KEY = "engagement_last_scheduled_at";
+const INTERVAL_SECONDS = 2 * 60 * 60;       // testing → 2 * 60 * 60 for prod
+const COOLDOWN_MS = 2 * 60 * 1000;        // testing → 6 * 60 * 60 * 1000 for prod
+
+let isScheduling = false;
+
 const MESSAGES = [
   { title: "👀 {name}, someone mentioned you", body: "Or maybe not. Only one way to find out." },
   { title: "📩 {name}, you might have a new message", body: "A classmate, a senior, or someone unexpected." },
@@ -27,83 +33,52 @@ const MESSAGES = [
   { title: "📍 Something's happening near you", body: "{name}, students are already talking about it." },
 ];
 
-const CHANNEL_ID = "engagement";
-const STORAGE_KEY = "engagement_notification_ids";
-const QUIET_BEFORE_HOUR = 9;   // no notifications before 9am
-const QUIET_AFTER_HOUR = 22;   // no notifications after 10pm
-
-// Production: 2 hours. For testing change to e.g. 30 * 1000 (30 seconds)
-// const INTERVAL_MS = 2 * 60 * 60 * 1000;
-const INTERVAL_MS = 20 * 1000; // 20 seconds
-const SLOTS = 12;
-
 function applyName(template: string, name: string): string {
   return template.replace(/\{name\}/g, name);
 }
 
-function nextAllowedTime(from: Date): Date {
-  const d = new Date(from);
-  const hour = d.getHours();
-  if (hour < QUIET_BEFORE_HOUR) {
-    d.setHours(QUIET_BEFORE_HOUR, 0, 0, 0);
-  } else if (hour >= QUIET_AFTER_HOUR) {
-    d.setDate(d.getDate() + 1);
-    d.setHours(QUIET_BEFORE_HOUR, 0, 0, 0);
-  }
-  return d;
-}
-
 export async function scheduleEngagementNotifications(userName?: string) {
-  await cancelEngagementNotifications();
+  if (isScheduling) return;
+  isScheduling = true;
 
-  // Use first name only — "Rahul Kumar" → "Rahul"
-  const firstName = userName?.split(" ")[0]?.trim() || "you";
+  try {
+    // If any notifications are already queued, leave them alone
+    const existing = await Notifications.getAllScheduledNotificationsAsync();
+    if (existing.length > 0) return;
 
-  // Shuffle so order feels random every time
-  const shuffled = [...MESSAGES].sort(() => Math.random() - 0.5);
-  const ids: string[] = [];
-  let cursor = new Date(Date.now() + INTERVAL_MS);
+    await Notifications.cancelAllScheduledNotificationsAsync();
 
-  for (let i = 0; i < SLOTS; i++) {
-    // Space each notification INTERVAL_MS apart from the previous one
-    // (not from now), so they truly fire one by one
-    if (i > 0) cursor = new Date(cursor.getTime() + INTERVAL_MS);
+    const firstName = userName?.split(" ")[0]?.trim() || "you";
+    const ids: string[] = [];
+    let fireAt = Date.now() + INTERVAL_SECONDS * 1000;
 
-    const fireAt = nextAllowedTime(cursor);
-    const msg = shuffled[i % shuffled.length];
+    for (const msg of MESSAGES) {
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: applyName(msg.title, firstName),
+          body: applyName(msg.body, firstName),
+          data: { type: "engagement", link: "/(tabs)" },
+          ...(Platform.OS === "android" && { channelId: CHANNEL_ID }),
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: new Date(fireAt),
+        },
+      });
 
-    const id = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: applyName(msg.title, firstName),
-        body: applyName(msg.body, firstName),
-        data: { type: "engagement", link: "/(tabs)" },
-        ...(Platform.OS === "android" && { channelId: CHANNEL_ID }),
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: fireAt,
-      },
-    });
+      ids.push(id);
+      fireAt += INTERVAL_SECONDS * 1000;
+    }
 
-    ids.push(id);
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
+    return ids;
+  } finally {
+    isScheduling = false;
   }
-
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
-  return ids;
 }
 
 export async function cancelEngagementNotifications() {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const ids: string[] = JSON.parse(raw);
-    await Promise.all(
-      ids.map((id) =>
-        Notifications.cancelScheduledNotificationAsync(id).catch(() => {})
-      )
-    );
-    await AsyncStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // nothing stored yet
-  }
+  await Notifications.cancelAllScheduledNotificationsAsync();
+  await AsyncStorage.removeItem(STORAGE_KEY);
+  await AsyncStorage.removeItem(LAST_SCHEDULED_KEY);
 }

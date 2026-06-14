@@ -22,7 +22,6 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
-
 import { QueryProvider } from "@/providers/QueryProvider";
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
 import { ThemeProvider, useTheme } from "@/providers/ThemeProvider";
@@ -33,16 +32,13 @@ import {
   cancelEngagementNotifications,
 } from "@/lib/scheduleEngagementNotifications";
 
-// Suppress banner/sound when app is in the foreground — only log to
-// notification centre (shouldShowList: true) so nothing interrupts the user.
-// When backgrounded or killed, the OS handles display itself.
 Notifications.setNotificationHandler({
   handleNotification: async () => {
     const isActive = AppState.currentState === "active";
     return {
-      shouldShowBanner: !isActive,   // no banner while app is open
-      shouldShowList: true,          // always add to notification centre
-      shouldPlaySound: !isActive,    // no sound while app is open
+      shouldShowBanner: !isActive,
+      shouldShowList: true,
+      shouldPlaySound: !isActive,
       shouldSetBadge: true,
     };
   },
@@ -170,20 +166,6 @@ function RootLayoutNav() {
     setup();
   }, [isAuthenticated, userData, user]);
 
-  // ─── Re-schedule on foreground ────────────────────────────────────────────
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const userName: string = userData?.name || userData?.username || "";
-
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        scheduleEngagementNotifications(userName);
-      }
-    });
-
-    return () => sub.remove();
-  }, [isAuthenticated, userData]);
 
   return (
     <>
