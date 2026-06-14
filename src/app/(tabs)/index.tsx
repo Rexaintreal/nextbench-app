@@ -14,21 +14,21 @@ import { useTheme } from "@/providers/ThemeProvider";
 import { useFollowingIds } from "@/lib/follows";
 import { isChatMessageNotification } from "@/lib/notifications";
 
-type FeedItem = 
+type FeedItem =
   | { type: 'post'; data: Post & { feedScore?: number }; timestamp: number }
   | { type: 'product'; data: Product; timestamp: number };
 
 export default function FeedScreen() {
   const { user, userData } = useAuth();
   const { followingIds } = useFollowingIds();
-  
+
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  
+
   const [rawPosts, setRawPosts] = useState<Post[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  
+
   const [upvotedPostIds, setUpvotedPostIds] = useState<Set<string>>(new Set());
   const [wishlistedIds, setWishlistedIds] = useState<Set<string>>(new Set());
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
@@ -38,12 +38,17 @@ export default function FeedScreen() {
   const [optimisticUpvotes, setOptimisticUpvotes] = useState<Record<string, { liked: boolean; count: number }>>({});
   const upvoteSyncRefs = useRef<Record<string, { timer: ReturnType<typeof setTimeout> | null; baseline: boolean }>>({});
   const flatListRef = useRef<FlatList>(null);
+
+  // FIX: Single source of truth for what's displayed.
+  // committedFeedItems = what's on screen.
+  // pendingFeedItems = latest computed feed (may have new items not yet shown).
   const [committedFeedItems, setCommittedFeedItems] = useState<FeedItem[]>([]);
+  const pendingFeedItemsRef = useRef<FeedItem[]>([]);
   const [pendingNewCount, setPendingNewCount] = useState(0);
   const pillAnim = useRef(new Animated.Value(0)).current;
   const prevTabRef = useRef(contentType);
+  const isAtTopRef = useRef(true); // track scroll position
 
-  // Unread non-message notifications → bell badge
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
   useEffect(() => {
@@ -54,8 +59,6 @@ export default function FeedScreen() {
       .where("read", "==", false)
       .onSnapshot((snap) => {
         if (!snap) return;
-        // exclude only actual chat-thread messages (type new_message AND link to /chat/...)
-        // comment/reply notifications (type new_message but linking to a post) still count
         const count = snap.docs.filter(d => !isChatMessageNotification(d.data() as any)).length;
         setUnreadNotifCount(count);
       }, (error) => {
@@ -83,19 +86,18 @@ export default function FeedScreen() {
           });
 
           if (uncachedIds.size > 0) {
-            const promises = Array.from(uncachedIds).map(async (uid) => {
-              const uDoc = await firestore().collection('users').doc(uid).get();
-              if (uDoc.data()) userCache[uid] = uDoc.data();
-              else userCache[uid] = {};
-            });
-            await Promise.all(promises);
+            await Promise.all(
+              Array.from(uncachedIds).map(async (uid) => {
+                const uDoc = await firestore().collection('users').doc(uid).get();
+                userCache[uid] = uDoc.data() || {};
+              })
+            );
           }
 
           const fetchedPosts: Post[] = [];
           snapshot.forEach(docSnap => {
             const data = docSnap.data();
             const authorData = userCache[data.authorId] || {};
-            
             fetchedPosts.push({
               id: docSnap.id,
               ...data,
@@ -110,6 +112,9 @@ export default function FeedScreen() {
         } finally {
           setLoadingPosts(false);
         }
+      }, (err) => {
+        console.error("Posts listener error:", err);
+        setLoadingPosts(false);
       });
 
     return () => unsubscribe();
@@ -141,6 +146,9 @@ export default function FeedScreen() {
         } finally {
           setLoadingProducts(false);
         }
+      }, (err) => {
+        console.error("Products listener error:", err);
+        setLoadingProducts(false);
       });
 
     return () => unsubscribe();
@@ -217,10 +225,10 @@ export default function FeedScreen() {
 
     if (contentType === 'for-you' || contentType === 'all') {
       const now = Date.now();
-      
+
       const scoredItems = allItems.map(item => {
         let score = 0;
-        
+
         if (item._type === 'post') {
           score = (item.upvotesCount || 0) * 2 + (item.repliesCount || 0) * 3;
           if (followingIds.has(item.authorId)) score += 20;
@@ -237,7 +245,7 @@ export default function FeedScreen() {
 
         const itemTime = item.createdAt?.toMillis?.() || Date.now();
         const hoursAgo = Math.max(0.5, (now - itemTime) / (1000 * 60 * 60));
-        const velocity = item._type === 'post' 
+        const velocity = item._type === 'post'
           ? ((item.upvotesCount || 0) + (item.repliesCount || 0) * 1.5) / hoursAgo
           : 0;
         score += Math.min(velocity * 2, 25);
@@ -268,13 +276,13 @@ export default function FeedScreen() {
         }
       }
       finalFeed.push(...unusedProducts);
-      
+
       return finalFeed.map(item => ({
         type: item._type,
         data: item,
         timestamp: item.createdAt?.toMillis?.() || 0
       })) as FeedItem[];
-    } 
+    }
     else if (contentType === 'posts') {
       return [...rawPosts].sort((a, b) => {
         const timeA = a.createdAt?.toMillis?.() || 0;
@@ -285,7 +293,7 @@ export default function FeedScreen() {
         data: p,
         timestamp: p.createdAt?.toMillis?.() || 0
       })) as FeedItem[];
-    } 
+    }
     else {
       return [...products].sort((a, b) => {
         if (a.status === 'sold' && b.status !== 'sold') return 1;
@@ -301,31 +309,48 @@ export default function FeedScreen() {
     }
   }, [rawPosts, products, contentType, followingIds, userData]);
 
+  // FIX: Properly handle incoming feed updates
   useEffect(() => {
     if (!feedItems || loadingPosts || loadingProducts) return;
 
     const tabChanged = prevTabRef.current !== contentType;
     prevTabRef.current = contentType;
 
+    // Always commit immediately on tab change or first load
     if (tabChanged || committedFeedItems.length === 0) {
       setCommittedFeedItems(feedItems);
+      pendingFeedItemsRef.current = [];
       setPendingNewCount(0);
       pillAnim.setValue(0);
       return;
     }
 
+    // Find genuinely new items (IDs not in current committed feed)
     const committedIds = new Set(committedFeedItems.map(i => `${i.type}-${i.data.id}`));
     const genuinelyNew = feedItems.filter(i => !committedIds.has(`${i.type}-${i.data.id}`));
 
     if (genuinelyNew.length > 0) {
-      setPendingNewCount(genuinelyNew.length);
-      Animated.spring(pillAnim, {
-        toValue: 1,
-        useNativeDriver: true,
-        tension: 80,
-        friction: 10,
-      }).start();
+      // Store the full latest feed for when user taps pill or refreshes
+      pendingFeedItemsRef.current = feedItems;
+
+      if (isAtTopRef.current) {
+        // User is at top → auto-commit immediately, no pill needed
+        setCommittedFeedItems(feedItems);
+        pendingFeedItemsRef.current = [];
+        setPendingNewCount(0);
+      } else {
+        // User scrolled down → show pill
+        setPendingNewCount(genuinelyNew.length);
+        Animated.spring(pillAnim, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 80,
+          friction: 10,
+        }).start();
+      }
     } else {
+      // No new IDs — just update existing items in-place (upvote counts, etc.)
+      // This makes realtime upvote/reply count changes visible without disrupting scroll position
       const feedDataById = new Map(feedItems.map(i => [`${i.type}-${i.data.id}`, i]));
       setCommittedFeedItems(prev => {
         let changed = false;
@@ -342,24 +367,36 @@ export default function FeedScreen() {
     }
   }, [feedItems, contentType, loadingPosts, loadingProducts]);
 
-  const handleNewPostsPill = useCallback(() => {
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-    setCommittedFeedItems(feedItems ?? []);
-    setPendingNewCount(0);
+  const dismissPill = useCallback(() => {
     Animated.timing(pillAnim, {
       toValue: 0,
       duration: 200,
       useNativeDriver: true,
     }).start();
-  }, [feedItems, pillAnim]);
+    setPendingNewCount(0);
+    pendingFeedItemsRef.current = [];
+  }, [pillAnim]);
 
+  const handleNewPostsPill = useCallback(() => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    // Commit whatever is the latest computed feed
+    const latest = pendingFeedItemsRef.current.length > 0 ? pendingFeedItemsRef.current : feedItems;
+    setCommittedFeedItems(latest);
+    dismissPill();
+  }, [feedItems, dismissPill]);
+
+  // FIX: onRefresh now actually commits the latest data and scrolls to top
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setCommittedFeedItems(feedItems ?? []);
+    // Commit pending feed items (Firestore listeners already have the latest data)
+    const latest = pendingFeedItemsRef.current.length > 0 ? pendingFeedItemsRef.current : feedItems;
+    setCommittedFeedItems(latest);
+    pendingFeedItemsRef.current = [];
     setPendingNewCount(0);
     pillAnim.setValue(0);
     flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-    setRefreshing(false);
+    // Small delay so the spinner feels intentional
+    setTimeout(() => setRefreshing(false), 400);
   }, [feedItems, pillAnim]);
 
   const handleUpvote = (post: Post) => {
@@ -424,8 +461,8 @@ export default function FeedScreen() {
       const displayUpvotesCount = opt ? opt.count : (item.data.upvotesCount || 0);
 
       return (
-        <PostCard 
-          post={{ ...item.data, upvotesCount: displayUpvotesCount }} 
+        <PostCard
+          post={{ ...item.data, upvotesCount: displayUpvotesCount }}
           hasUpvoted={displayHasUpvoted}
           isSaved={savedPostIds.has(item.data.id)}
           onPress={() => router.push(`/post/${item.data.id}` as any)}
@@ -436,8 +473,8 @@ export default function FeedScreen() {
       );
     } else {
       return (
-        <ProductCard 
-          product={item.data} 
+        <ProductCard
+          product={item.data}
           isWishlisted={wishlistedIds.has(item.data.id)}
           onPress={() => router.push(`/product/${item.data.id}` as any)}
           onToggleWishlist={() => handleToggleWishlist(item.data)}
@@ -462,8 +499,8 @@ export default function FeedScreen() {
         {/* Top Header */}
         <View className="flex-row items-center justify-between mb-3">
           <View className="flex-row items-center">
-            <Image 
-              source={require('../../../assets/images/logo.png')} 
+            <Image
+              source={require('../../../assets/images/logo.png')}
               className="h-7 w-7 mr-2"
               resizeMode="contain"
             />
@@ -472,17 +509,16 @@ export default function FeedScreen() {
             </Text>
           </View>
           <View className="flex-row items-center gap-3">
-            <TouchableOpacity 
-              onPress={toggleTheme} 
+            <TouchableOpacity
+              onPress={toggleTheme}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               className="p-1"
             >
               {isDark ? <Sun size={20} color={iconColor} /> : <Moon size={20} color={iconColor} />}
             </TouchableOpacity>
 
-            {/* Bell icon with badge */}
-            <TouchableOpacity 
-              onPress={() => router.push('/notifications')} 
+            <TouchableOpacity
+              onPress={() => router.push('/notifications')}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               className="p-1"
             >
@@ -518,12 +554,12 @@ export default function FeedScreen() {
               key={tab.key}
               onPress={() => setContentType(tab.key)}
               className={`flex-1 py-2 rounded-lg items-center ${
-                contentType === tab.key 
-                  ? 'bg-white dark:bg-surface-dark-elevated' 
+                contentType === tab.key
+                  ? 'bg-white dark:bg-surface-dark-elevated'
                   : 'bg-transparent'
               }`}
               style={
-                contentType === tab.key 
+                contentType === tab.key
                   ? {
                       shadowColor: '#000',
                       shadowOffset: { width: 0, height: 1 },
@@ -534,11 +570,11 @@ export default function FeedScreen() {
                   : undefined
               }
             >
-              <Text 
-                variant="label" 
+              <Text
+                variant="label"
                 className={`text-[13px] ${
-                  contentType === tab.key 
-                    ? 'font-sans-semibold text-ink dark:text-ink-dark' 
+                  contentType === tab.key
+                    ? 'font-sans-semibold text-ink dark:text-ink-dark'
                     : 'font-sans-medium text-content-tertiary dark:text-ink-dark-faint'
                 }`}
               >
@@ -605,6 +641,11 @@ export default function FeedScreen() {
             data={committedFeedItems}
             keyExtractor={item => `${item.type}-${item.data.id}`}
             renderItem={renderItem}
+            // FIX: Track scroll position to auto-commit when at top
+            onScroll={(e) => {
+              isAtTopRef.current = e.nativeEvent.contentOffset.y < 50;
+            }}
+            scrollEventThrottle={100}
             ListHeaderComponent={
               <View className="px-5 py-3">
                 <View className="flex-row items-center">
@@ -619,7 +660,7 @@ export default function FeedScreen() {
                       </View>
                     )}
                   </View>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     onPress={() => router.push('/post/create' as any)}
                     className="flex-1 h-10 px-4 rounded-full bg-surface-soft dark:bg-surface-dark-secondary justify-center"
                     activeOpacity={0.7}
