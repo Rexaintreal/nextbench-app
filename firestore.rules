@@ -84,7 +84,14 @@ service cloud.firestore {
           && incoming().diff(existing()).affectedKeys().hasOnly(['online', 'lastSeen'])
           && incoming().online is bool
           && incoming().lastSeen == request.time)
-      );
+        ||
+        // Chat privacy toggle
+        (request.auth.uid == userId
+          && incoming().diff(existing()).affectedKeys().hasOnly(['chatPrivacy'])
+          && incoming().chatPrivacy is map
+          && incoming().chatPrivacy.keys().hasOnly(['followersOnly'])
+          && incoming().chatPrivacy.followersOnly is bool)
+        );
 
       allow delete: if isAdmin();
 

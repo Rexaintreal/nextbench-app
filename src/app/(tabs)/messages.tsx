@@ -49,6 +49,7 @@ export default function MessagesScreen() {
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState<'messages' | 'requests'>('messages');
   const deletedAtRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
@@ -89,7 +90,6 @@ export default function MessagesScreen() {
             const otherUserId = data.participants.find(id => id !== user.uid);
             if (!otherUserId) return;
 
-            // Only resurrect if the other person sent a new message AFTER we deleted
             const deletedAt = deletedAtRef.current[doc.id] || 0;
             const roomUpdatedAt = data.updatedAt?.toMillis?.() || 0;
             if (
@@ -104,7 +104,6 @@ export default function MessagesScreen() {
                   .update({ deletedBy: [] })
                   .catch(() => {})
               );
-              // Optimistically treat as not deleted for this render
               data.deletedBy = data.deletedBy.filter((id: string) => id !== user.uid);
             }
 
@@ -230,13 +229,52 @@ export default function MessagesScreen() {
     );
   };
 
+  const currentData = activeTab === 'messages' ? activeRooms : pendingRequests;
+
   return (
     <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={['top']}>
-      <View className="px-5 pt-3 pb-3 border-b border-surface-soft dark:border-surface-dark-secondary">
+      <View className="px-5 pt-3 border-b border-surface-soft dark:border-surface-dark-secondary">
         <Text variant="h2" className="text-[22px] mb-3">
           Messages
         </Text>
-        
+
+        {/* Tab switcher */}
+        <View className="flex-row">
+          {(['messages', 'requests'] as const).map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              onPress={() => setActiveTab(tab)}
+              className="flex-1 items-center pb-2.5"
+              style={{
+                borderBottomWidth: 2,
+                borderBottomColor: activeTab === tab
+                  ? (isDark ? '#FFFFFF' : '#000000')
+                  : 'transparent',
+              }}
+            >
+              <View className="flex-row items-center gap-1.5">
+                <Text
+                  className={`text-[15px] font-sans-semibold ${
+                    activeTab === tab ? 'text-content dark:text-content-dark' : 'text-content-tertiary'
+                  }`}
+                >
+                  {tab === 'messages' ? 'Messages' : 'Requests'}
+                </Text>
+                {tab === 'requests' && pendingRequests.length > 0 && (
+                  <View className="w-4 h-4 rounded-full bg-brand-pink items-center justify-center">
+                    <Text className="text-white text-[10px] font-bold">
+                      {pendingRequests.length}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* Search bar — shared across both tabs */}
+      <View className="px-5 pt-3 pb-3">
         <View className="relative">
           <View className="absolute left-3 top-0 bottom-0 justify-center z-10">
             <Search size={16} color="#8E8E93" />
@@ -255,46 +293,31 @@ export default function MessagesScreen() {
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#0071E3" />
         </View>
-      ) : filteredRooms.length === 0 ? (
+      ) : currentData.length === 0 ? (
         <View className="flex-1 items-center justify-center p-6">
           <View className="w-14 h-14 bg-surface-soft dark:bg-surface-dark-secondary rounded-full items-center justify-center mb-4">
             <MessageSquare size={28} color="#8E8E93" />
           </View>
-          <Text variant="h4" className="mb-2">No messages</Text>
+          <Text variant="h4" className="mb-2">
+            {activeTab === 'messages' ? 'No messages' : 'No requests'}
+          </Text>
           <Text variant="caption" className="text-content-tertiary text-center leading-[20px]">
-            Start a conversation by contacting a seller from the marketplace.
+            {activeTab === 'messages'
+              ? 'Start a conversation by contacting a seller from the marketplace.'
+              : 'Chat requests from other users will appear here.'}
           </Text>
         </View>
       ) : (
         <FlatList
-          data={activeRooms}
+          data={currentData}
           keyExtractor={item => item.id}
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 100 }}
-          ListHeaderComponent={
-            pendingRequests.length > 0 ? (
-              <View className="mb-2">
-                <View className="px-5 pt-3 pb-2 flex-row items-center gap-2">
-                  <Text variant="label" className="font-sans-semibold text-amber-600 dark:text-amber-400">
-                    Chat Requests
-                  </Text>
-                  <View className="bg-amber-500 rounded-full px-2 py-0.5">
-                    <Text variant="caption" className="text-white text-[11px] font-sans-bold">
-                      {pendingRequests.length}
-                    </Text>
-                  </View>
-                </View>
-                {pendingRequests.map(item => (
-                  <View key={item.id}>
-                    {renderItem({ item })}
-                  </View>
-                ))}
-                <View className="h-[0.5px] mx-5 mt-1" style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }} />
-              </View>
-            ) : null
-          }
           ItemSeparatorComponent={() => (
-            <View className="h-[0.5px] ml-[76px] mr-5" style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }} />
+            <View
+              className="h-[0.5px] ml-[76px] mr-5"
+              style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }}
+            />
           )}
         />
       )}
