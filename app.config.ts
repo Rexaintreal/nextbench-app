@@ -4,7 +4,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "NextBench",
   slug: "nextbench",
-  version: "1.0.0",
+  version: "1.0.2",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: "nextbench",
@@ -19,7 +19,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
     package: "in.nextbench.app",
-    versionCode: 1,
+    versionCode: 2,
     softwareKeyboardLayoutMode: "resize",
   },
 

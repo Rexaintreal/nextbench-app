@@ -1,5 +1,5 @@
 {
-  "name": "nextbench_ios",
+  "name": "nextbench",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
