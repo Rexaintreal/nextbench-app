@@ -3,7 +3,7 @@ import { View, TouchableOpacity, Image } from 'react-native';
 import ShareToChatModal from '@/components/ui/ShareToChatModal';
 import { router } from 'expo-router';
 import { Text } from '@/components/ui/Text';
-import { Heart, MessageCircle, Share2, Bookmark, Flame } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, Bookmark, Flame, Trash2 } from 'lucide-react-native';
 import PollDisplay from '@/components/ui/PollDisplay';
 import { ImageSlider } from '@/components/ui/ImageSlider';
 import { useTheme } from '@/providers/ThemeProvider';
@@ -40,6 +40,7 @@ export interface PostCardProps {
   onUpvote?: () => void;
   onToggleSave?: () => void;
   onAuthorPress?: () => void;
+  onDelete?: () => void;
 }
 
 function timeAgo(date: any): string {
@@ -54,7 +55,7 @@ function timeAgo(date: any): string {
   return date.toDate().toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export default function PostCard({ post, hasUpvoted, isSaved, onPress, onUpvote, onToggleSave, onAuthorPress }: PostCardProps) {
+export default function PostCard({ post, hasUpvoted, isSaved, onPress, onUpvote, onToggleSave, onAuthorPress, onDelete }: PostCardProps) {
   const { isDark } = useTheme();
   const inputBg = isDark ? '#2C2C2E' : '#F5F5F7';
   const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -186,6 +187,14 @@ export default function PostCard({ post, hasUpvoted, isSaved, onPress, onUpvote,
             >
               <Bookmark size={20} color={isSaved ? '#0071E3' : '#8E8E93'} fill={isSaved ? '#0071E3' : 'transparent'} />
             </TouchableOpacity>
+            {onDelete && (
+              <TouchableOpacity
+                onPress={onDelete}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Trash2 size={20} color="#8E8E93" />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </TouchableOpacity>

@@ -10,7 +10,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useTheme } from "@/providers/ThemeProvider";
 import {
   Settings, ShieldCheck, MapPin, Grid, MessageSquare,
-  Bell, Heart, X, Bookmark, Camera,
+  Bell, Heart, X, Bookmark, Camera, Trash2,
 } from "lucide-react-native";
 import firestore from "@react-native-firebase/firestore";
 import * as ImagePicker from "expo-image-picker";
@@ -18,6 +18,7 @@ import ProductCard, { Product } from "@/components/ui/ProductCard";
 import PostCard, { Post } from "@/components/ui/PostCard";
 import { useFollowCounts } from "@/lib/follows";
 import { uploadCoverPhotoMobile } from "@/services/firebase/storage";
+import { AppAlert } from "@/components/ui/AppAlert";
 
 const COVER_HEIGHT = 120;
 const AVATAR_SIZE  = 76;
@@ -118,8 +119,48 @@ export default function ProfileScreen() {
       await firestore().collection("users").doc(user.uid).update({
         coverPhoto: url, updatedAt: firestore.FieldValue.serverTimestamp(),
       });
-    } catch { Alert.alert("Upload failed", "Could not update cover photo."); }
+    } catch { AppAlert.alert("Upload failed", "Could not update cover photo."); }
     finally { setIsUploadingCover(false); }
+  };
+  const handleDeletePost = (postId: string) => {
+    AppAlert.alert(
+      "Delete post?",
+      "This can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await firestore().collection("posts").doc(postId).delete();
+            } catch {
+              AppAlert.alert("Error", "Could not delete post. Please try again.");
+            }
+          },
+        },
+      ]
+    );
+  };
+  const handleDeleteListing = (productId: string) => {
+    AppAlert.alert(
+      "Delete listing?",
+      "This can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await firestore().collection("products").doc(productId).delete();
+            } catch {
+              AppAlert.alert("Error", "Could not delete listing. Please try again.");
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (!user || !userData) return (
@@ -147,9 +188,11 @@ export default function ProfileScreen() {
           <Text variant="bodySmall" className="text-content-tertiary mt-3">No listings yet</Text>
         </View>
       );
+      
       return myListings.map(item => (
         <ProductCard key={item.id} product={item} isWishlisted={false}
-          onPress={() => router.push(`/product/${item.id}` as any)} onToggleWishlist={() => {}} />
+          onPress={() => router.push(`/product/${item.id}` as any)} onToggleWishlist={() => {}}
+          onDelete={() => handleDeleteListing(item.id)} />
       ));
     }
     if (viewMode === "posts") {
@@ -162,7 +205,8 @@ export default function ProfileScreen() {
       );
       return myPosts.map(post => (
         <PostCard key={post.id} post={post} hasUpvoted={false}
-          onPress={() => router.push(`/post/${post.id}` as any)} />
+          onPress={() => router.push(`/post/${post.id}` as any)}
+          onDelete={() => handleDeletePost(post.id)} />
       ));
     }
     if (viewMode === "playlist") {

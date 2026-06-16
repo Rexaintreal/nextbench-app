@@ -3,7 +3,7 @@ import { View, TouchableOpacity } from 'react-native';
 import ShareToChatModal from '@/components/ui/ShareToChatModal';
 import { router } from 'expo-router';
 import { Text } from '@/components/ui/Text';
-import { Heart, MapPin, Tag, Share2 } from 'lucide-react-native';
+import { Heart, MapPin, Tag, Share2, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/providers/ThemeProvider';
 import { ImageSlider } from '@/components/ui/ImageSlider';
 
@@ -33,9 +33,10 @@ export interface ProductCardProps {
   onPress?: () => void;
   onToggleWishlist?: () => void;
   onSellerPress?: () => void;
+  onDelete?: () => void;
 }
 
-export default function ProductCard({ product, isWishlisted, onPress, onToggleWishlist, onSellerPress }: ProductCardProps) {
+export default function ProductCard({ product, isWishlisted, onPress, onToggleWishlist, onSellerPress, onDelete }: ProductCardProps) {
   const { isDark } = useTheme();
   const inputBg = isDark ? '#2C2C2E' : '#F5F5F7';
   const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -160,6 +161,14 @@ export default function ProductCard({ product, isWishlisted, onPress, onToggleWi
             >
               <Share2 size={18} color="#8E8E93" />
             </TouchableOpacity>
+            {onDelete && (
+              <TouchableOpacity
+                onPress={onDelete}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Trash2 size={18} color="#8E8E93" />
+              </TouchableOpacity>
+            )}
             <View className={`px-5 py-2.5 rounded-xl ${isSold ? 'bg-surface-soft dark:bg-surface-dark-secondary' : 'bg-brand-teal'}`}>
               <Text variant="caption" className={`font-sans-semibold text-[12px] ${isSold ? 'text-content-tertiary' : 'text-white'}`}>
                 {isSold ? 'Sold' : 'View'}

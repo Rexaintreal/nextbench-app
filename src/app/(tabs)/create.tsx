@@ -3,7 +3,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { uploadPostImageMobile } from "@/lib/storage";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import { Upload, X, Check, Tag } from "lucide-react-native";
+import { Upload, X, Check, Tag, MapPin, Truck } from "lucide-react-native";
 import { useState, useRef } from "react";
 import {
   ActivityIndicator,
@@ -33,7 +33,8 @@ export default function CreateScreen() {
   const [category, setCategory] = useState("Books");
   const [condition, setCondition] = useState("Like New");
   const [images, setImages] = useState<string[]>([]);
-
+  const [meetupAvailable, setMeetupAvailable] = useState(true);
+  const [deliveryAvailable, setDeliveryAvailable] = useState(false);
   // ── Tags state ─────────────────────────────────────
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
@@ -98,8 +99,8 @@ export default function CreateScreen() {
         image: imageUrls[0],
         images: imageUrls,
         description,
-        meetupAvailable: true,
-        deliveryAvailable: false,
+        meetupAvailable,
+        deliveryAvailable,
         tags,                         // ← real tags array, no longer hardcoded []
         sellerId: user.uid,
         sellerName: userData.name || 'Unknown',
@@ -118,6 +119,8 @@ export default function CreateScreen() {
       setDescription("");
       setImages([]);
       setTags([]);
+      setMeetupAvailable(true);
+      setDeliveryAvailable(false);
       router.push("/(tabs)");
     } catch (error) {
       console.error("Error creating listing", error);
@@ -384,7 +387,65 @@ export default function CreateScreen() {
             placeholderTextColor={placeholderClr}
           />
         </View>
+        {/* ── Delivery Options ───────────────────────── */}
+        <View className="mb-6">
+          <Text variant="caption" className="text-content-tertiary font-sans-semibold uppercase tracking-widest text-[11px] mb-2">
+            Delivery Options
+          </Text>
+          <View className="flex-row gap-3">
+            {/* School Meetup */}
+            <TouchableOpacity
+              onPress={() => setMeetupAvailable(prev => !prev)}
+              className={`flex-1 flex-row items-center gap-3 p-3.5 rounded-xl border ${
+                meetupAvailable
+                  ? 'border-brand-teal bg-brand-teal/5'
+                  : 'border-surface-soft dark:border-surface-dark-secondary bg-surface-soft dark:bg-surface-dark-secondary'
+              }`}
+            >
+              <View
+                className={`w-9 h-9 rounded-lg items-center justify-center ${
+                  meetupAvailable ? 'bg-brand-teal' : 'bg-surface dark:bg-surface-dark'
+                }`}
+              >
+                <MapPin size={16} color={meetupAvailable ? '#FFF' : '#8E8E93'} />
+              </View>
+              <View className="flex-1">
+                <Text variant="caption" className="text-[13px] font-sans-semibold text-content-primary">
+                  School Meetup
+                </Text>
+                <Text variant="caption" className="text-content-tertiary text-[9px] uppercase font-sans-semibold tracking-widest">
+                  Official points
+                </Text>
+              </View>
+            </TouchableOpacity>
 
+            {/* Local Delivery */}
+            <TouchableOpacity
+              onPress={() => setDeliveryAvailable(prev => !prev)}
+              className={`flex-1 flex-row items-center gap-3 p-3.5 rounded-xl border ${
+                deliveryAvailable
+                  ? 'border-brand-pink bg-brand-pink/5'
+                  : 'border-surface-soft dark:border-surface-dark-secondary bg-surface-soft dark:bg-surface-dark-secondary'
+              }`}
+            >
+              <View
+                className={`w-9 h-9 rounded-lg items-center justify-center ${
+                  deliveryAvailable ? 'bg-brand-pink' : 'bg-surface dark:bg-surface-dark'
+                }`}
+              >
+                <Truck size={16} color={deliveryAvailable ? '#FFF' : '#8E8E93'} />
+              </View>
+              <View className="flex-1">
+                <Text variant="caption" className="text-[13px] font-sans-semibold text-content-primary">
+                  Local Delivery
+                </Text>
+                <Text variant="caption" className="text-content-tertiary text-[9px] uppercase font-sans-semibold tracking-widest">
+                  Porter / Instamart
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
         {/* ── Submit ─────────────────────────────────── */}
         <TouchableOpacity
           onPress={handleSubmit}
