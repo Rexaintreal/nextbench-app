@@ -7,6 +7,7 @@ import { Heart, MessageCircle, Share2, Bookmark, Flame, Trash2 } from 'lucide-re
 import PollDisplay from '@/components/ui/PollDisplay';
 import { ImageSlider } from '@/components/ui/ImageSlider';
 import { useTheme } from '@/providers/ThemeProvider';
+import PdfAttachment from '@/components/ui/PdfAttachment';
 
 export interface Post {
   id: string;
@@ -20,6 +21,8 @@ export interface Post {
   type: string;
   imageUrl?: string;
   imageUrls?: string[];
+  pdfUrl?: string;
+  pdfPages?: number;
   upvotesCount: number;
   repliesCount: number;
   feedScore?: number;
@@ -155,6 +158,16 @@ export default function PostCard({ post, hasUpvoted, isSaved, onPress, onUpvote,
         {/* Poll */}
         {post.poll && (
           <PollDisplay postId={post.id} poll={post.poll} compact />
+        )}
+
+        {/* PDF attachment — shows file card, downloads & opens with native viewer on tap */}
+        {post.pdfUrl && (
+          <PdfAttachment
+            pdfUrl={post.pdfUrl}
+            totalPages={post.pdfPages}
+            title={post.title}
+            isDark={isDark}
+          />
         )}
 
         {/* Actions */}
