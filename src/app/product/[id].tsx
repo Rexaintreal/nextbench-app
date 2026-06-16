@@ -4,7 +4,7 @@ import { AppAlert } from '@/components/ui/AppAlert';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
-import { ChevronLeft, Heart, Share2, ShieldCheck, Tag } from "lucide-react-native";
+import { ChevronLeft, Heart, Share2, ShieldCheck, Tag, Truck, MapPin } from "lucide-react-native";
 import { useAuth } from "@/providers/AuthProvider";
 import { Product } from "@/components/ui/ProductCard";
 import firestore from "@react-native-firebase/firestore";
@@ -226,17 +226,35 @@ export default function ProductDetailScreen() {
             {product.description || "No description provided."}
           </Text>
 
-          {/* Meetup */}
+          {/* Meetup & Delivery */}
           <View className="flex-row gap-3 mb-8">
             <View
               className="flex-1 bg-surface-soft dark:bg-surface-dark-elevated p-4 rounded-xl"
               style={{ borderWidth: 1, borderColor }}
             >
-              <Text variant="caption" className="text-[9px] uppercase tracking-widest font-sans-semibold text-brand-teal mb-1">
-                Meetup
-              </Text>
+              <View className="flex-row items-center gap-1 mb-1">
+                <MapPin size={10} color="#14B8A6" />
+                <Text variant="caption" className="text-[9px] uppercase tracking-widest font-sans-semibold text-brand-teal">
+                  Meetup
+                </Text>
+              </View>
               <Text variant="label" className="font-sans-semibold text-xs dark:text-ink-dark">
                 {product.meetupAvailable ? "Campus Specified" : "Unavailable"}
+              </Text>
+            </View>
+
+            <View
+              className="flex-1 bg-surface-soft dark:bg-surface-dark-elevated p-4 rounded-xl"
+              style={{ borderWidth: 1, borderColor }}
+            >
+              <View className="flex-row items-center gap-1 mb-1">
+                <Truck size={10} color="#FF375F" />
+                <Text variant="caption" className="text-[9px] uppercase tracking-widest font-sans-semibold text-brand-pink">
+                  Delivery
+                </Text>
+              </View>
+              <Text variant="label" className="font-sans-semibold text-xs dark:text-ink-dark">
+                {product.deliveryAvailable ? "Available" : "Unavailable"}
               </Text>
             </View>
           </View>

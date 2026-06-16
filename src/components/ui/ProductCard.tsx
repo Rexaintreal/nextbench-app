@@ -3,7 +3,7 @@ import { View, TouchableOpacity } from 'react-native';
 import ShareToChatModal from '@/components/ui/ShareToChatModal';
 import { router } from 'expo-router';
 import { Text } from '@/components/ui/Text';
-import { Heart, MapPin, Tag, Share2, Trash2 } from 'lucide-react-native';
+import { Heart, MapPin, Tag, Share2, Trash2, Truck } from 'lucide-react-native';
 import { useTheme } from '@/providers/ThemeProvider';
 import { ImageSlider } from '@/components/ui/ImageSlider';
 
@@ -22,6 +22,7 @@ export interface Product {
   sellerSchool: string;
   description?: string;
   meetupAvailable?: boolean;
+  deliveryAvailable?: boolean;
   tags?: string[];
   city?: string;
   createdAt: any;
@@ -109,9 +110,30 @@ export default function ProductCard({ product, isWishlisted, onPress, onToggleWi
           </View>
         </TouchableOpacity>
 
-        <Text variant="h4" className="mb-3" numberOfLines={1}>
+        <Text variant="h4" className="mb-2" numberOfLines={1}>
           {product.title}
         </Text>
+
+        {(product.meetupAvailable || product.deliveryAvailable) && (
+          <View className="flex-row items-center gap-2 mb-3">
+            {product.meetupAvailable && (
+              <View className="flex-row items-center bg-brand-teal/10 px-2.5 py-1 rounded-md gap-1">
+                <MapPin size={11} color="#14B8A6" />
+                <Text variant="caption" className="text-[10px] font-sans-semibold text-brand-teal">
+                  Meetup
+                </Text>
+              </View>
+            )}
+            {product.deliveryAvailable && (
+              <View className="flex-row items-center bg-brand-pink/10 px-2.5 py-1 rounded-md gap-1">
+                <Truck size={11} color="#FF375F" />
+                <Text variant="caption" className="text-[10px] font-sans-semibold text-brand-pink">
+                  Delivery
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
         </TouchableOpacity>
 
         {/* Image Container */}
