@@ -4,7 +4,7 @@ import { AppAlert } from '@/components/ui/AppAlert';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
-import { ChevronLeft, Heart, Share2, ShieldCheck } from "lucide-react-native";
+import { ChevronLeft, Heart, Share2, ShieldCheck, Tag } from "lucide-react-native";
 import { useAuth } from "@/providers/AuthProvider";
 import { Product } from "@/components/ui/ProductCard";
 import firestore from "@react-native-firebase/firestore";
@@ -161,10 +161,30 @@ export default function ProductDetailScreen() {
           <Text variant="h1" className="text-3xl font-sans-bold mb-2 leading-tight dark:text-ink-dark">
             {product.title}
           </Text>
+
+          {/* ── Tags ── */}
+          {(product as any).tags && (product as any).tags.length > 0 && (
+            <View className="flex-row flex-wrap gap-2 mb-4">
+              {((product as any).tags as string[]).map((tag: string) => (
+                <View
+                  key={tag}
+                  className="flex-row items-center gap-1 bg-brand-teal/10 px-2.5 py-1 rounded-lg"
+                >
+                  <Tag size={10} color="#14B8A6" />
+                  <Text
+                    variant="caption"
+                    className="text-brand-teal font-sans-semibold uppercase tracking-widest text-[10px]"
+                  >
+                    {tag}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
           <Text variant="h2" className="text-2xl text-brand-pink mb-6">
             ₹{product.price}
           </Text>
-
           {/* Actions */}
           <View className="flex-row gap-3 mb-6">
             <TouchableOpacity

@@ -22,6 +22,7 @@ export interface Product {
   sellerSchool: string;
   description?: string;
   meetupAvailable?: boolean;
+  tags?: string[];
   city?: string;
   createdAt: any;
 }
