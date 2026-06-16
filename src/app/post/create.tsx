@@ -13,14 +13,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   useColorScheme,
+  Switch,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
-import { X, ImagePlus, ChevronDown } from "lucide-react-native";
-import { getFirestore, collection, addDoc, serverTimestamp } from '@react-native-firebase/firestore';
+import { X, ImagePlus, ChevronDown, BarChart3, Plus, Trash2 } from "lucide-react-native";
+import firestore, { Timestamp } from "@react-native-firebase/firestore";
 import { uploadPostImageMobile } from "@/lib/storage";
 import { AppAlert } from '@/components/ui/AppAlert';
 
@@ -33,10 +34,17 @@ const POST_TYPES = [
   { value: "others",     label: "Others" },
 ] as const;
 
+const POLL_DURATIONS = [
+  { label: '1 day',  hours: 24 },
+  { label: '3 days', hours: 72 },
+  { label: '1 week', hours: 168 },
+];
+
 export default function PostCreateScreen() {
   const { user, userData } = useAuth();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
+  const insets = useSafeAreaInsets();
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -46,12 +54,37 @@ export default function PostCreateScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTypeMenu, setShowTypeMenu] = useState(false);
 
-  // Theme-aware colours used in JS style props (can't use className on TextInput bg)
+  // ── Poll state ──────────────────────────────────────
+  const [pollEnabled, setPollEnabled] = useState(false);
+  const [pollChoices, setPollChoices] = useState<string[]>(['', '']);
+  const [pollDurationIdx, setPollDurationIdx] = useState(0);
+
+  const addPollChoice = () => {
+    if (pollChoices.length >= 5) return;
+    setPollChoices(prev => [...prev, '']);
+  };
+
+  const removePollChoice = (idx: number) => {
+    if (pollChoices.length <= 2) return;
+    setPollChoices(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const updatePollChoice = (idx: number, value: string) => {
+    setPollChoices(prev => prev.map((c, i) => (i === idx ? value : c)));
+  };
+
+  const isPollValid = () =>
+    pollChoices.filter(c => c.trim().length > 0).length >= 2;
+
+  // ── Theme-aware colours ─────────────────────────────
   const inputBg        = isDark ? "#2C2C2E" : "#F5F5F7";
   const inputText      = isDark ? "#F5F5F7" : "#1A1A1C";
   const placeholderClr = isDark ? "#636366" : "#9CA3AF";
   const borderClr      = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
+  const teal           = isDark ? '#2DD4BF' : '#14B8A6';
+  const labelColor     = isDark ? '#A1A1AA' : '#71717A';
 
+  // ── Image picking ───────────────────────────────────
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -68,17 +101,33 @@ export default function PostCreateScreen() {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // ── Submit ──────────────────────────────────────────
   const handleSubmit = async () => {
     if (!content.trim()) { AppAlert.alert("Please write something before posting."); return; }
     if (!user || !userData) { AppAlert.alert("You must be logged in to post."); return; }
+    if (pollEnabled && !isPollValid()) {
+      AppAlert.alert("Poll incomplete", "Please fill in at least 2 poll choices.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       let imageUrls: string[] = [];
       if (images.length > 0) {
         imageUrls = await Promise.all(
-        images.map((uri) => uploadPostImageMobile(uri))
+          images.map((uri) => uploadPostImageMobile(uri))
         );
+      }
+
+      let pollPayload: object | null = null;
+      if (pollEnabled) {
+        const filledChoices = pollChoices.filter(c => c.trim().length > 0);
+        const durationMs = POLL_DURATIONS[pollDurationIdx].hours * 60 * 60 * 1000;
+        pollPayload = {
+          choices: filledChoices,
+          votes: {},
+          expiresAt: Timestamp.fromMillis(Date.now() + durationMs),
+        };
       }
 
       const payload: any = {
@@ -96,11 +145,13 @@ export default function PostCreateScreen() {
         upvotesCount: 0,
         repliesCount: 0,
         status: "approved",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        updatedAt: firestore.FieldValue.serverTimestamp(),
       };
 
-      await addDoc(collection(getFirestore(), "posts"), payload);
+      if (pollPayload) payload.poll = pollPayload;
+
+      await firestore().collection("posts").add(payload);
       router.back();
     } catch (error) {
       console.error("Error creating post:", error);
@@ -127,12 +178,11 @@ export default function PostCreateScreen() {
             onPress={() => router.back()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <X size={24} color={isDark ? "#8E8E93" : "#8E8E93"} />
+            <X size={24} color="#8E8E93" />
           </TouchableOpacity>
 
           <Text variant="h4" className="dark:text-ink-dark">New Post</Text>
 
-          {/* Post button — explicit colours so it's visible in both modes */}
           <TouchableOpacity
             onPress={handleSubmit}
             disabled={!canSubmit}
@@ -152,9 +202,7 @@ export default function PostCreateScreen() {
                 variant="label"
                 style={{
                   fontSize: 13,
-                  color: canSubmit
-                    ? "#FFFFFF"
-                    : isDark ? "#636366" : "#9CA3AF",
+                  color: canSubmit ? "#FFFFFF" : isDark ? "#636366" : "#9CA3AF",
                 }}
               >
                 Post
@@ -193,9 +241,9 @@ export default function PostCreateScreen() {
             className="flex-row items-center mb-5 self-start px-3 py-1.5 rounded-full"
             style={{ borderWidth: 1, borderColor: borderClr }}
           >
-          <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted mr-1">
-            {POST_TYPES.find(t => t.value === type)?.label || type}
-          </Text>
+            <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted mr-1">
+              {POST_TYPES.find(t => t.value === type)?.label || type}
+            </Text>
             <ChevronDown size={14} color={isDark ? "#98989D" : "#8E8E93"} />
           </TouchableOpacity>
 
@@ -204,25 +252,25 @@ export default function PostCreateScreen() {
               className="mb-5 rounded-xl overflow-hidden"
               style={{ borderWidth: 1, borderColor: borderClr, backgroundColor: inputBg }}
             >
-            {POST_TYPES.map((t) => (
-              <TouchableOpacity
-                key={t.value}
-                onPress={() => {
-                  setType(t.value);
-                  setShowTypeMenu(false);
-                  setIsAnonymous(t.value === "confession");
-                }}
-                className={`px-4 py-3 ${type === t.value ? "bg-brand-teal/5" : ""}`}
-                style={{ borderBottomWidth: 1, borderBottomColor: borderClr }}
-              >
-                <Text
-                  variant="label"
-                  className={`${type === t.value ? "text-brand-teal" : "text-content-secondary dark:text-ink-dark-muted"}`}
+              {POST_TYPES.map((t) => (
+                <TouchableOpacity
+                  key={t.value}
+                  onPress={() => {
+                    setType(t.value);
+                    setShowTypeMenu(false);
+                    setIsAnonymous(t.value === "confession");
+                  }}
+                  className={`px-4 py-3 ${type === t.value ? "bg-brand-teal/5" : ""}`}
+                  style={{ borderBottomWidth: 1, borderBottomColor: borderClr }}
                 >
-                  {t.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text
+                    variant="label"
+                    className={`${type === t.value ? "text-brand-teal" : "text-content-secondary dark:text-ink-dark-muted"}`}
+                  >
+                    {t.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           )}
 
@@ -298,14 +346,188 @@ export default function PostCreateScreen() {
               ))}
             </View>
           )}
+
+          {/* ── Poll section ── */}
+          <View
+            style={{
+              marginTop: 24,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: pollEnabled ? teal + '40' : borderClr,
+              overflow: 'hidden',
+            }}
+          >
+            {/* Toggle row */}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                backgroundColor: pollEnabled
+                  ? (isDark ? 'rgba(20,184,166,0.08)' : 'rgba(20,184,166,0.04)')
+                  : inputBg,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <BarChart3 size={18} color={pollEnabled ? teal : labelColor} strokeWidth={2} />
+                <View>
+                  <Text style={{ color: pollEnabled ? teal : inputText, fontWeight: '600', fontSize: 15 }}>
+                    Add a Poll
+                  </Text>
+                  <Text style={{ color: labelColor, fontSize: 12, marginTop: 1 }}>
+                    Let readers vote on something
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={pollEnabled}
+                onValueChange={v => {
+                  setPollEnabled(v);
+                  if (!v) setPollChoices(['', '']);
+                }}
+                trackColor={{ false: borderClr, true: teal + '80' }}
+                thumbColor={pollEnabled ? teal : (isDark ? '#52525B' : '#D4D4D8')}
+              />
+            </View>
+
+            {/* Poll options */}
+            {pollEnabled && (
+              <View style={{ padding: 16, gap: 10 }}>
+                {pollChoices.map((choice, idx) => (
+                  <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View
+                      style={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: 11,
+                        borderWidth: 1.5,
+                        borderColor: borderClr,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: labelColor }}>
+                        {idx + 1}
+                      </Text>
+                    </View>
+                    <TextInput
+                      value={choice}
+                      onChangeText={v => updatePollChoice(idx, v)}
+                      placeholder={`Option ${idx + 1}`}
+                      placeholderTextColor="#8E8E93"
+                      style={{
+                        flex: 1,
+                        backgroundColor: inputBg,
+                        borderRadius: 10,
+                        paddingHorizontal: 12,
+                        paddingVertical: 9,
+                        fontSize: 14,
+                        color: inputText,
+                        borderWidth: 1,
+                        borderColor: choice.trim() ? teal + '60' : borderClr,
+                      }}
+                    />
+                    {pollChoices.length > 2 && (
+                      <TouchableOpacity
+                        onPress={() => removePollChoice(idx)}
+                        style={{
+                          padding: 6,
+                          borderRadius: 8,
+                          backgroundColor: isDark ? 'rgba(244,63,94,0.12)' : 'rgba(244,63,94,0.08)',
+                        }}
+                      >
+                        <Trash2 size={14} color="#F43F5E" strokeWidth={2} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+
+                {pollChoices.length < 5 && (
+                  <TouchableOpacity
+                    onPress={addPollChoice}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      paddingVertical: 9,
+                      paddingHorizontal: 12,
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderStyle: 'dashed',
+                      borderColor: teal + '60',
+                      marginTop: 2,
+                    }}
+                  >
+                    <Plus size={14} color={teal} strokeWidth={2.5} />
+                    <Text style={{ color: teal, fontSize: 13, fontWeight: '600' }}>
+                      Add option ({pollChoices.length}/5)
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Duration picker */}
+                <View style={{ marginTop: 4 }}>
+                  <Text
+                    style={{
+                      color: labelColor,
+                      fontSize: 11,
+                      fontWeight: '700',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    Poll Duration
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {POLL_DURATIONS.map((dur, idx) => {
+                      const active = pollDurationIdx === idx;
+                      return (
+                        <TouchableOpacity
+                          key={idx}
+                          onPress={() => setPollDurationIdx(idx)}
+                          style={{
+                            flex: 1,
+                            paddingVertical: 8,
+                            borderRadius: 10,
+                            alignItems: 'center',
+                            backgroundColor: active ? teal : inputBg,
+                            borderWidth: 1,
+                            borderColor: active ? teal : borderClr,
+                          }}
+                        >
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: active ? '#fff' : labelColor }}>
+                            {dur.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              </View>
+            )}
+          </View>
         </ScrollView>
 
         {/* ── Bottom toolbar ── */}
         <View
           className="flex-row items-center px-5 py-3"
-          style={{ borderTopWidth: 1, borderTopColor: borderClr }}
+          style={{
+            borderTopWidth: 1,
+            borderTopColor: borderClr,
+            paddingBottom: Math.max(insets.bottom, 12),
+          }}
         >
-          <TouchableOpacity onPress={pickImage} disabled={images.length >= 4} className="mr-4">
+          <TouchableOpacity
+            onPress={pickImage}
+            disabled={images.length >= 4}
+            className="mr-4"
+            style={{ padding: 10, margin: -10 }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
             <ImagePlus size={24} color={images.length >= 4 ? (isDark ? "#3A3A3C" : "#D1D5DB") : "#14B8A6"} />
           </TouchableOpacity>
           <View className="flex-1" />
