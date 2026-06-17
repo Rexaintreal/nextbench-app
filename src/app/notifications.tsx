@@ -16,10 +16,10 @@ import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   Bell, CheckCheck, ShieldCheck, Package,
-  MessageSquare, Star, Trash2, Crown, ChevronLeft,
+  MessageSquare, Star, Trash2, Crown, ChevronLeft, MessageCircle,
 } from "lucide-react-native";
 import {
-  getFirestore, collection, query, where, orderBy,
+  getFirestore, collection, query, where, orderBy, limit, getDocs, getDoc,
   onSnapshot, doc, updateDoc, deleteDoc, writeBatch,
 } from "@react-native-firebase/firestore";
 import { AppAlert } from "@/components/ui/AppAlert";
@@ -30,6 +30,7 @@ interface Notification {
   title: string;
   message: string;
   link?: string;
+  postId?: string;
   read: boolean;
   createdAt: any;
 }
@@ -37,7 +38,7 @@ interface Notification {
 type FilterKey = "all" | "deals" | "social" | "system";
 
 const isDeals  = (type: string) => ["listing_approved","listing_rejected","item_reserved","item_sold","new_review"].includes(type);
-const isSocial = (type: string) => ["new_message"].includes(type);
+const isSocial = (type: string) => ["new_message","new_reply","new_post"].includes(type);
 const isSystem = (type: string) => ["user_approved","admin_promoted"].includes(type);
 
 const ICON_MAP: Record<string, { icon: any; color: string }> = {
@@ -46,6 +47,7 @@ const ICON_MAP: Record<string, { icon: any; color: string }> = {
   listing_rejected: { icon: Package,       color: "#EF4444" },
   new_message:      { icon: MessageSquare, color: "#F77CA2" },
   new_post:         { icon: Bell,          color: "#0071E3" },
+  new_reply:        { icon: MessageCircle, color: "#14B8A6" },
   item_reserved:    { icon: Package,       color: "#F59E0B" },
   item_sold:        { icon: Package,       color: "#0071E3" },
   new_review:       { icon: Star,          color: "#EAB308" },
@@ -133,18 +135,27 @@ export default function NotificationsScreen() {
     }
   };
 
-  const handleClick = (notif: Notification) => {
+  const handleClick = async (notif: Notification) => {
+    console.log("notif data:", JSON.stringify(notif));
     if (!notif.read) markAsRead(notif.id);
-    if (notif.link) {
-      if (notif.link.startsWith("/chat/")) {
-        router.push(`/chat/${notif.link.replace("/chat/", "")}` as any);
-      } else if (notif.link.startsWith("/product/")) {
-        router.push(`/product/${notif.link.replace("/product/", "")}` as any);
-      } else if (notif.link.startsWith("/profile/")) {
-        router.push(`/profile/${notif.link.replace("/profile/", "")}` as any);
+      if (notif.link) {
+        if (notif.link.startsWith("/chat/")) {
+          router.push(`/chat/${notif.link.replace("/chat/", "")}` as any);
+        } else if (notif.link.startsWith("/product/")) {
+          router.push(`/product/${notif.link.replace("/product/", "")}` as any);
+        } else if (notif.link.startsWith("/profile/")) {
+          router.push(`/profile/${notif.link.replace("/profile/", "")}` as any);
+        } else if (notif.link.startsWith("/post/")) {
+          router.push(notif.link as any);
+        }
+        return;
       }
-    }
-  };
+
+      // fallback for any legacy docs saved without a link
+      if (notif.type === "new_post" && notif.postId) {
+        router.push(`/post/${notif.postId}` as any);
+      }
+    };
 
   const filterTabs: { key: FilterKey; label: string; count: number }[] = [
     { key: "all",    label: "All",    count: unreadCounts.all },

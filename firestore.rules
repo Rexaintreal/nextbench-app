@@ -456,9 +456,16 @@ service cloud.firestore {
         && (!incoming().keys().hasAny(['upvotesCount']) || (incoming().upvotesCount is number))
         && (!incoming().keys().hasAny(['repliesCount']) || (incoming().repliesCount is number))
         && incoming().createdAt == request.time;
-      allow update: if isVerified() && (
-        incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'repliesCount', 'updatedAt'])
-      );
+        allow update: if isVerified() && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'repliesCount', 'updatedAt'])
+          ||
+          (resource.data.authorId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['content', 'edited', 'updatedAt'])
+            && incoming().content is string
+            && incoming().content.size() > 0 && incoming().content.size() <= 1000
+            && incoming().edited == true
+            && incoming().updatedAt == request.time)
+        );
       allow delete: if isVerified() && (resource.data.authorId == request.auth.uid || get(/databases/$(database)/documents/posts/$(resource.data.postId)).data.authorId == request.auth.uid || isAdmin());
     }
 

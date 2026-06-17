@@ -2,6 +2,7 @@
  * Post Detail Screen
  * — replies now support image attachments (pick from gallery, preview, display inline)
  * — comments/replies now support likes (togglable, optimistic UI)
+ * — comments/replies now support editing (author-only, text-only)
  */
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
@@ -29,9 +30,10 @@ import * as ImagePicker from "expo-image-picker";
 import { ImageSlider } from "@/components/ui/ImageSlider";
 import {
   Heart, MessageCircle, Share2, ArrowLeft,
-  Send, X, Bookmark, ImagePlus,
+  Send, X, Bookmark, ImagePlus, Check,
 } from "lucide-react-native";
 import { toggleUpvote, toggleSavePost } from "@/lib/social";
+import { notifyOnReply } from "@/lib/notifications";
 import PollDisplay from "@/components/ui/PollDisplay";
 import ShareToChatModal from '@/components/ui/ShareToChatModal';
 
@@ -45,6 +47,7 @@ interface Reply {
   parentId?: string | null;
   repliesCount?: number;
   upvotesCount?: number;
+  edited?: boolean;
   createdAt: any;
 }
 
@@ -86,8 +89,18 @@ async function toggleReplyUpvote(replyId: string, userId: string) {
   }
 }
 
+// Edit a reply's content. Mirrors the Firestore rule exactly:
+// only content/edited/updatedAt may change, and edited must become true.
+async function editReply(replyId: string, content: string) {
+  await firestore().collection("post_replies").doc(replyId).update({
+    content,
+    edited: true,
+    updatedAt: firestore.FieldValue.serverTimestamp(),
+  });
+}
+
 export default function PostDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, replyId: targetReplyId } = useLocalSearchParams<{ id: string; replyId?: string }>();
   const { user, userData } = useAuth();
   const { isDark } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
@@ -100,12 +113,22 @@ export default function PostDetailScreen() {
   const iconColor      = isDark ? "#F5F5F7" : "#1A1A1C";
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'top'>('newest');
 
+  // Deep-link to a specific comment (from a "new_reply" notification)
+  const commentRefs = useRef<Record<string, View | null>>({});
+  const [highlightedReplyId, setHighlightedReplyId] = useState<string | null>(null);
+  const hasScrolledToTarget = useRef(false);
+
   const [post, setPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [replies, setReplies] = useState<Reply[]>([]);
   const [newComment, setNewComment] = useState("");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+
+  // Comment editing state
+  const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
+  const [editedContent, setEditedContent] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Post-level upvote state
   const [hasUpvoted, setHasUpvoted] = useState(false);
@@ -131,7 +154,7 @@ export default function PostDetailScreen() {
   >({});
 
   const [hasSaved, setHasSaved] = useState(false);
-  const [replyingTo, setReplyingTo] = useState<{ id: string; name: string } | null>(null);
+  const [replyingTo, setReplyingTo] = useState<{ id: string; name: string; authorId: string } | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useEffect(() => {
@@ -145,8 +168,8 @@ export default function PostDetailScreen() {
     return () => { show.remove(); hide.remove(); };
   }, []);
 
-  const handleReply = (replyId: string, name: string) => {
-    setReplyingTo({ id: replyId, name });
+  const handleReply = (replyId: string, name: string, authorId: string) => {
+    setReplyingTo({ id: replyId, name, authorId });
     setTimeout(() => inputRef.current?.focus(), 150);
   };
 
@@ -181,6 +204,7 @@ export default function PostDetailScreen() {
             parentId: data.parentId || null,
             repliesCount: data.repliesCount || 0,
             upvotesCount: data.upvotesCount || 0,
+            edited: data.edited || false,
             createdAt: data.createdAt,
           });
         });
@@ -402,7 +426,7 @@ export default function PostDetailScreen() {
       };
       if (replyingTo) replyData.parentId = replyingTo.id;
 
-      await firestore().collection("post_replies").add(replyData);
+      const newReplyRef = await firestore().collection("post_replies").add(replyData);
       await firestore().collection("posts").doc(id).update({
         repliesCount: firestore.FieldValue.increment(1),
       });
@@ -410,6 +434,22 @@ export default function PostDetailScreen() {
         await firestore().collection("post_replies").doc(replyingTo.id).update({
           repliesCount: firestore.FieldValue.increment(1),
         });
+      }
+
+      // Notify the right recipient — the comment author if this is a nested
+      // reply, otherwise the post author for a top-level comment. Fire-and-forget;
+      // notifications are non-critical and shouldn't block the UI on failure.
+      const recipientUserId = replyingTo ? replyingTo.authorId : post?.authorId;
+      if (recipientUserId) {
+        notifyOnReply({
+          recipientUserId,
+          actorUserId: user.uid,
+          actorName: userData.name || "Unknown",
+          postId: id,
+          replyId: newReplyRef.id,
+          isReplyToComment: !!replyingTo,
+          contentPreview: replyData.content,
+        }).catch((err) => console.warn("notifyOnReply failed:", err));
       }
 
       setNewComment("");
@@ -444,6 +484,35 @@ export default function PostDetailScreen() {
     ]);
   };
 
+  // Begin editing a comment — preload its current text
+  const handleStartEdit = (reply: Reply) => {
+    setReplyingTo(null);
+    setEditingReplyId(reply.id);
+    setEditedContent(reply.content);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingReplyId(null);
+    setEditedContent("");
+  };
+
+  const handleSaveEdit = async () => {
+    const trimmed = editedContent.trim();
+    if (!editingReplyId || trimmed.length === 0 || savingEdit) return;
+
+    setSavingEdit(true);
+    try {
+      await editReply(editingReplyId, trimmed);
+      setEditingReplyId(null);
+      setEditedContent("");
+    } catch (err) {
+      console.error("Edit comment error:", err);
+      AppAlert.alert("Couldn't save", "Something went wrong editing your comment. Please try again.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const repliesMap = useMemo(() => {
     const map: Record<string, Reply[]> = {};
     replies.forEach((r) => {
@@ -463,6 +532,39 @@ export default function PostDetailScreen() {
     }
     return root.sort((a, b) => (b.createdAt?.toDate?.()?.getTime() || 0) - (a.createdAt?.toDate?.()?.getTime() || 0));
   }, [repliesMap, sortBy, optimisticReplyUpvotes]);
+
+  // Deep-link: once the target reply exists in the loaded list, scroll to it
+  // and briefly highlight it. Runs once per screen visit.
+  useEffect(() => {
+    if (!targetReplyId || hasScrolledToTarget.current) return;
+    const exists = replies.some((r) => r.id === targetReplyId);
+    if (!exists) return;
+
+    const tryScroll = () => {
+      const node = commentRefs.current[targetReplyId];
+      if (!node || !scrollRef.current) return false;
+      node.measureLayout(
+        // @ts-ignore — measureLayout's 2nd arg expects a host component handle
+        scrollRef.current,
+        (_x: number, y: number) => {
+          scrollRef.current?.scrollTo({ y: Math.max(y - 16, 0), animated: true });
+        },
+        () => {}
+      );
+      return true;
+    };
+
+    // Give the list a moment to lay out before measuring.
+    const t = setTimeout(() => {
+      hasScrolledToTarget.current = true;
+      setHighlightedReplyId(targetReplyId);
+      tryScroll();
+      setTimeout(() => setHighlightedReplyId(null), 2500);
+    }, 350);
+
+    return () => clearTimeout(t);
+  }, [targetReplyId, replies]);
+
   const renderCommentNode = (reply: Reply, level = 0) => {
     const children = repliesMap[reply.id] || [];
     const isIndented = level > 0;
@@ -472,9 +574,22 @@ export default function PostDetailScreen() {
     const isLiked = opt ? opt.liked : upvotedReplyIds.has(reply.id);
     const likeCount = opt ? opt.count : (reply.upvotesCount || 0);
 
+    const isOwn = reply.authorId === user?.uid;
+    const isEditing = editingReplyId === reply.id;
+    const isHighlighted = highlightedReplyId === reply.id;
+
     return (
-      <View key={reply.id} className={`mb-4 ${isIndented ? "ml-10 mt-1" : ""}`}>
-        <View className="flex-row">
+      <View
+        key={reply.id}
+        ref={(node) => { commentRefs.current[reply.id] = node; }}
+        collapsable={false}
+        style={isHighlighted ? {
+          backgroundColor: isDark ? "rgba(20,184,166,0.12)" : "rgba(20,184,166,0.08)",
+          borderRadius: 12,
+        } : undefined}
+        className={`mb-4 ${isIndented ? "ml-10 mt-1" : ""}`}
+      >
+        <View className="flex-row" style={{ padding: isHighlighted ? 8 : 0 }}>
           <TouchableOpacity onPress={() => router.push(`/profile/${reply.authorId}` as any)}>
             <View
               style={{
@@ -517,80 +632,141 @@ export default function PostDetailScreen() {
               </Text>
               <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint">
                 {timeAgo(reply.createdAt)}
+                {reply.edited ? " · edited" : ""}
               </Text>
             </View>
 
-            {/* Comment text */}
-            {reply.content ? (
-              <Text
-                variant="body"
-                className="text-content-secondary dark:text-ink-dark-muted leading-[22px]"
-                style={{ fontSize: isIndented ? 14 : 15 }}
-              >
-                {reply.content}
-              </Text>
-            ) : null}
-
-            {/* Comment image */}
-            {reply.imageUrl ? (
-              <View
-                style={{
-                  marginTop: 8,
-                  borderRadius: 12,
-                  overflow: "hidden",
-                  width: "100%",
-                  aspectRatio: 4 / 3,
-                  backgroundColor: inputBg,
-                }}
-              >
-                <Image
-                  source={{ uri: reply.imageUrl }}
-                  style={{ width: "100%", height: "100%" }}
-                  resizeMode="cover"
-                />
-              </View>
-            ) : null}
-
-            {/* Action row */}
-            <View className="flex-row items-center gap-4 mt-1.5">
-              {/* Like button — now wired up */}
-              <TouchableOpacity
-                onPress={() => handleReplyUpvote(reply)}
-                className="flex-row items-center gap-1"
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Heart
-                  size={14}
-                  color={isLiked ? "#FF375F" : isDark ? "#636366" : "#8E8E93"}
-                  fill={isLiked ? "#FF375F" : "transparent"}
-                />
-                <Text
-                  variant="caption"
+            {/* Comment text — editable inline when isEditing */}
+            {isEditing ? (
+              <View>
+                <TextInput
+                  value={editedContent}
+                  onChangeText={setEditedContent}
+                  autoFocus
+                  multiline
+                  maxLength={1000}
                   style={{
-                    fontFamily: "Inter_600SemiBold",
-                    color: isLiked
-                      ? "#FF375F"
-                      : isDark ? "#636366" : "#8E8E93",
+                    fontSize: isIndented ? 14 : 15,
+                    lineHeight: 22,
+                    color: inputText,
+                    backgroundColor: inputBg,
+                    borderRadius: 12,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    minHeight: 40,
                   }}
-                >
-                  {likeCount > 0 ? likeCount : "Like"}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={() => handleReply(reply.id, reply.authorName)}>
-                <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint font-sans-semibold">
-                  Reply
-                </Text>
-              </TouchableOpacity>
-
-              {(reply.authorId === user?.uid || (userData as any)?.role === "admin") && (
-                <TouchableOpacity onPress={() => handleDeleteComment(reply.id)}>
-                  <Text variant="caption" className="text-error font-sans-semibold">
-                    Delete
+                />
+                <View className="flex-row items-center gap-4 mt-2">
+                  <TouchableOpacity
+                    onPress={handleSaveEdit}
+                    disabled={savingEdit || editedContent.trim().length === 0}
+                    className="flex-row items-center gap-1"
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    {savingEdit ? (
+                      <ActivityIndicator size="small" color="#14B8A6" />
+                    ) : (
+                      <>
+                        <Check size={14} color="#14B8A6" />
+                        <Text variant="caption" style={{ fontFamily: "Inter_600SemiBold", color: "#14B8A6" }}>
+                          Save
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleCancelEdit}
+                    disabled={savingEdit}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint font-sans-semibold">
+                      Cancel
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <>
+                {reply.content ? (
+                  <Text
+                    variant="body"
+                    className="text-content-secondary dark:text-ink-dark-muted leading-[22px]"
+                    style={{ fontSize: isIndented ? 14 : 15 }}
+                  >
+                    {reply.content}
                   </Text>
-                </TouchableOpacity>
-              )}
-            </View>
+                ) : null}
+
+                {/* Comment image */}
+                {reply.imageUrl ? (
+                  <View
+                    style={{
+                      marginTop: 8,
+                      borderRadius: 12,
+                      overflow: "hidden",
+                      width: "100%",
+                      aspectRatio: 4 / 3,
+                      backgroundColor: inputBg,
+                    }}
+                  >
+                    <Image
+                      source={{ uri: reply.imageUrl }}
+                      style={{ width: "100%", height: "100%" }}
+                      resizeMode="cover"
+                    />
+                  </View>
+                ) : null}
+
+                {/* Action row */}
+                <View className="flex-row items-center gap-4 mt-1.5">
+                  {/* Like button */}
+                  <TouchableOpacity
+                    onPress={() => handleReplyUpvote(reply)}
+                    className="flex-row items-center gap-1"
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Heart
+                      size={14}
+                      color={isLiked ? "#FF375F" : isDark ? "#636366" : "#8E8E93"}
+                      fill={isLiked ? "#FF375F" : "transparent"}
+                    />
+                    <Text
+                      variant="caption"
+                      style={{
+                        fontFamily: "Inter_600SemiBold",
+                        color: isLiked
+                          ? "#FF375F"
+                          : isDark ? "#636366" : "#8E8E93",
+                      }}
+                    >
+                      {likeCount > 0 ? likeCount : "Like"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity onPress={() => handleReply(reply.id, reply.authorName, reply.authorId)}>
+                    <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint font-sans-semibold">
+                      Reply
+                    </Text>
+                  </TouchableOpacity>
+
+                  {isOwn && (
+                    <TouchableOpacity onPress={() => handleStartEdit(reply)}>
+                      <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint font-sans-semibold">
+                        Edit
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {(isOwn || (userData as any)?.role === "admin") && (
+                    <TouchableOpacity onPress={() => handleDeleteComment(reply.id)}>
+                      <Text variant="caption" className="text-error font-sans-semibold">
+                        Delete
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            )}
           </View>
         </View>
 
