@@ -6,6 +6,7 @@ import "../global.css";
 
 import React, { useEffect } from "react";
 import { Platform, AppState } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -194,14 +195,16 @@ export default function RootLayout() {
   }
 
   return (
-    <QueryProvider>
-      <ThemeProvider>
-        <AlertProvider>
-          <AuthProvider>
-            <RootLayoutNav />
-          </AuthProvider>
-        </AlertProvider>
-      </ThemeProvider>
-    </QueryProvider>
+    <SafeAreaProvider>
+      <QueryProvider>
+        <ThemeProvider>
+          <AlertProvider>
+            <AuthProvider>
+              <RootLayoutNav />
+            </AuthProvider>
+          </AlertProvider>
+        </ThemeProvider>
+      </QueryProvider>
+    </SafeAreaProvider>
   );
 }

@@ -120,8 +120,9 @@ export default function TabLayout() {
             backgroundColor: 'transparent',
             borderTopWidth: 0.5,
             borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-            height: 85,
+            height: 60 + insets.bottom,
             paddingTop: 10,
+            paddingBottom: insets.bottom,
           },
           tabBarBackground: () => (
             <View

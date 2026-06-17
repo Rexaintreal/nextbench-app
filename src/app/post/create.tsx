@@ -518,7 +518,7 @@ export default function PostCreateScreen() {
           style={{
             borderTopWidth: 1,
             borderTopColor: borderClr,
-            paddingBottom: Math.max(insets.bottom, 12),
+            paddingBottom: Math.max(insets.bottom + 32, 32),
           }}
         >
           <TouchableOpacity
