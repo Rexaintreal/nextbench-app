@@ -37,6 +37,7 @@ import { notifyOnReply } from "@/lib/notifications";
 import PollDisplay from "@/components/ui/PollDisplay";
 import ShareToChatModal from '@/components/ui/ShareToChatModal';
 
+
 interface Reply {
   id: string;
   authorId: string;
@@ -160,7 +161,7 @@ export default function PostDetailScreen() {
   useEffect(() => {
     if (Platform.OS !== "android") return;
     const show = Keyboard.addListener("keyboardDidShow", (e) => {
-      setKeyboardHeight(e.endCoordinates.height + 32);
+      setKeyboardHeight(e.endCoordinates.height + 12);
     });
     const hide = Keyboard.addListener("keyboardDidHide", () => {
       setKeyboardHeight(0);
@@ -1159,7 +1160,7 @@ export default function PostDetailScreen() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={["top", "bottom"]}>
       {Platform.OS === "ios" ? (
         <KeyboardAvoidingView behavior="padding" className="flex-1">
           {inner}

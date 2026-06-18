@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { View, ScrollView, ActivityIndicator, TouchableOpacity, useColorScheme } from "react-native";
 import { AppAlert } from '@/components/ui/AppAlert';
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { ChevronLeft, Heart, Share2, ShieldCheck, Tag, Truck, MapPin } from "lucide-react-native";
@@ -24,6 +24,7 @@ export default function ProductDetailScreen() {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [isWishlisted, setIsWishlisted] = useState(false);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (!id) return;
@@ -119,10 +120,10 @@ export default function ProductDetailScreen() {
         </Text>
       </View>
 
-      <ScrollView
-        className="flex-1 bg-surface dark:bg-surface-dark"
-        contentContainerStyle={{ paddingBottom: 120 }}
-      >
+        <ScrollView
+          className="flex-1 bg-surface dark:bg-surface-dark"
+          contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
+        >
         {/* Image */}
         <View className="w-full px-5 pt-5 relative">
           <ImageSlider urls={productImageUrls} inputBg={sliderBg} isDark={isDark} />
@@ -289,11 +290,15 @@ export default function ProductDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* Bottom CTA */}
-      <View
-        className="absolute bottom-0 left-0 right-0 p-5 pb-8 bg-surface dark:bg-surface-dark"
-        style={{ borderTopWidth: 1, borderTopColor: borderColor }}
-      >
+        {/* Bottom CTA */}
+        <View
+        className="absolute bottom-0 left-0 right-0 p-5 bg-surface dark:bg-surface-dark"
+        style={{
+          borderTopWidth: 1,
+          borderTopColor: borderColor,
+          paddingBottom: insets.bottom + 16,
+        }}
+        >
         <TouchableOpacity
           onPress={isSold || isOwner ? undefined : handleContactSeller}
           disabled={isSold || isOwner}

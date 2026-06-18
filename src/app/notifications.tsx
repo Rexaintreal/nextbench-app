@@ -308,7 +308,7 @@ export default function NotificationsScreen() {
           </View>
           <Text variant="h3" className="mb-2 dark:text-ink-dark">All Clear</Text>
           <Text variant="caption" className="text-content-secondary dark:text-ink-dark-muted text-center">
-            You'll be notified when something important happens — approvals, messages, and more.
+            You'll be notified when something important happens approvals, messages, and more.
           </Text>
         </View>
       ) : (
