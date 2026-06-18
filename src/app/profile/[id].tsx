@@ -28,6 +28,7 @@ import {
 } from "lucide-react-native";
 import firestore from "@react-native-firebase/firestore";
 import * as ImagePicker from "expo-image-picker";
+import { LinearGradient } from "expo-linear-gradient";
 import ProductCard, { Product } from "@/components/ui/ProductCard";
 import PostCard, { Post } from "@/components/ui/PostCard";
 import { useFollowStatus, useFollowCounts, followUser, unfollowUser } from "@/lib/follows";
@@ -304,26 +305,16 @@ export default function OtherProfileScreen() {
               resizeMode="cover"
             />
           ) : (
-            <View
-              style={{
-                width: "100%",
-                height: "100%",
-                backgroundColor: isDark ? "#0D3D38" : "#CCFBF1",
-              }}
-            >
-              <View
-                style={{
-                  position: "absolute",
-                  right: 0,
-                  top: 0,
-                  width: "55%",
-                  height: "100%",
-                  backgroundColor: isDark
-                    ? "rgba(244,63,94,0.18)"
-                    : "rgba(244,63,94,0.12)",
-                }}
-              />
-            </View>
+            <LinearGradient
+              colors={
+                isDark
+                  ? ["#0D3D38", "#134E48", "#3A1320"]
+                  : ["#CCFBF1", "#A7F3D9", "#FECDD3"]
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{ width: "100%", height: "100%" }}
+            />
           )}
 
           <View
