@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { View, FlatList, RefreshControl, TouchableOpacity, Image, Alert, ScrollView, Animated } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import PostCard, { Post } from "@/components/ui/PostCard";
@@ -38,8 +38,7 @@ export default function FeedScreen() {
   const [optimisticUpvotes, setOptimisticUpvotes] = useState<Record<string, { liked: boolean; count: number }>>({});
   const upvoteSyncRefs = useRef<Record<string, { timer: ReturnType<typeof setTimeout> | null; baseline: boolean }>>({});
   const flatListRef = useRef<FlatList>(null);
-
-  // FIX: Single source of truth for what's displayed.
+  const insets = useSafeAreaInsets();
   // committedFeedItems = what's on screen.
   // pendingFeedItems = latest computed feed (may have new items not yet shown).
   const [committedFeedItems, setCommittedFeedItems] = useState<FeedItem[]>([]);
@@ -699,7 +698,7 @@ export default function FeedScreen() {
         activeOpacity={0.85}
         style={{
           position: 'absolute',
-          bottom: 100,
+          bottom: 60 + insets.bottom + 16,
           right: 20,
           width: 52,
           height: 52,
