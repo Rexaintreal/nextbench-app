@@ -26,6 +26,7 @@ import {
 import { QueryProvider } from "@/providers/QueryProvider";
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
 import { ThemeProvider, useTheme } from "@/providers/ThemeProvider";
+import { NetworkProvider } from "@/providers/NetworkProvider";
 import { AlertProvider } from "@/components/ui/AppAlert";
 import { usePresence } from "@/lib/presence";
 import {
@@ -198,11 +199,13 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryProvider>
         <ThemeProvider>
-          <AlertProvider>
-            <AuthProvider>
-              <RootLayoutNav />
-            </AuthProvider>
-          </AlertProvider>
+          <NetworkProvider>
+            <AlertProvider>
+              <AuthProvider>
+                <RootLayoutNav />
+              </AuthProvider>
+            </AlertProvider>
+          </NetworkProvider>
         </ThemeProvider>
       </QueryProvider>
     </SafeAreaProvider>
