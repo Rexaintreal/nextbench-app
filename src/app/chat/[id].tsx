@@ -327,10 +327,19 @@ const MessageItem = ({
                       ? 'bg-black/10 border-white/50'
                       : 'bg-surface-soft dark:bg-surface-dark-secondary border-brand-teal/50'
                   }`}>
-                    <Text variant="caption" className={`font-sans-semibold ${isMe ? 'text-black' : 'text-brand-teal'}`}>
+                    <Text
+                      variant="caption"
+                      className={`font-sans-semibold ${!isMe ? 'text-brand-teal' : ''}`}
+                      style={isMe ? { color: '#FFFFFF' } : undefined}
+                    >
                       {item.replyTo.senderName}
                     </Text>
-                    <Text variant="caption" className={`${isMe ? 'text-black' : 'text-content-secondary dark:text-ink-dark-muted'}`} numberOfLines={2}>
+                    <Text
+                      variant="caption"
+                      className={!isMe ? 'text-content-secondary dark:text-ink-dark-muted' : ''}
+                      style={isMe ? { color: 'rgba(255,255,255,0.75)' } : undefined}
+                      numberOfLines={2}
+                    >
                       {item.replyTo.text}
                     </Text>
                   </View>
