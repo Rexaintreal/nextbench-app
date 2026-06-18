@@ -26,6 +26,7 @@ import {
   User,
   Shield,
   HelpCircle,
+  Ban,
 } from "lucide-react-native";
 import auth from "@react-native-firebase/auth";
 import { getFirestore, doc, updateDoc } from "@react-native-firebase/firestore";
@@ -217,6 +218,11 @@ export default function SettingsScreen() {
                 thumbColor="#FFFFFF"
               />
             }
+          />
+          <SettingsRow
+            icon={<Ban size={20} color={iconColor} />}
+            label="Blocked Users"
+            onPress={() => router.push('/blocked-users' as any)}
           />
         </View>
 
