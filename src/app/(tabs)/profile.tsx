@@ -237,11 +237,13 @@ export default function ProfileScreen() {
             <Bell size={20} color={iconColor} />
             {unreadNotifCount > 0 && (
               <View style={{
-                position: "absolute", top: 6, right: 6,
+                position: "absolute", top: 2, right: 2,
                 backgroundColor: "#F43F5E", borderRadius: 999,
-                width: 15, height: 15, alignItems: "center", justifyContent: "center",
+                minWidth: 14, height: 14, paddingHorizontal: 3,
+                alignItems: "center", justifyContent: "center",
+                borderWidth: 1.5, borderColor: cardBg,
               }}>
-                <Text style={{ color: "#fff", fontSize: 9, fontFamily: "Inter_600SemiBold" }}>
+                <Text style={{ color: "#fff", fontSize: 8, fontFamily: "Inter_600SemiBold", lineHeight: 11 }}>
                   {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
                 </Text>
               </View>
