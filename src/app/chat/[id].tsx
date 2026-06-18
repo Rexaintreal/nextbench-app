@@ -327,10 +327,10 @@ const MessageItem = ({
                       ? 'bg-black/10 border-white/50'
                       : 'bg-surface-soft dark:bg-surface-dark-secondary border-brand-teal/50'
                   }`}>
-                    <Text variant="caption" className={`font-sans-semibold ${isMe ? 'text-white/80' : 'text-brand-teal'}`}>
+                    <Text variant="caption" className={`font-sans-semibold ${isMe ? 'text-black' : 'text-brand-teal'}`}>
                       {item.replyTo.senderName}
                     </Text>
-                    <Text variant="caption" className={`${isMe ? 'text-white/70' : 'text-content-secondary dark:text-ink-dark-muted'}`} numberOfLines={2}>
+                    <Text variant="caption" className={`${isMe ? 'text-black' : 'text-content-secondary dark:text-ink-dark-muted'}`} numberOfLines={2}>
                       {item.replyTo.text}
                     </Text>
                   </View>
@@ -418,7 +418,7 @@ export default function ChatRoomScreen() {
   const [forwardChats, setForwardChats] = useState<any[]>([]);
   const [loadingChats, setLoadingChats] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const { isBlocked } = useBlockStatus(otherUser?.id);
+  const { isBlocked, isBlockedBy } = useBlockStatus(otherUser?.id);
   const [roomStatus, setRoomStatus] = useState<'active' | 'pending'>('active');
   const [requestedBy, setRequestedBy] = useState<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -571,6 +571,7 @@ export default function ChatRoomScreen() {
   // ── Send ─────────────────────────────────────────────────────────────────────
   const handleSend = async (text?: string, image?: string) => {
     if (!user || !roomId || (!text?.trim() && !image)) return;
+    if (isBlocked || isBlockedBy) return;
 
     if (roomStatus === 'pending' && requestedBy === user.uid) {
       const myMsgsSnap = await firestore()
@@ -748,18 +749,20 @@ export default function ChatRoomScreen() {
 
   const handleBlockUser = () => {
     if (!user || !otherUser?.id) return;
-    AppAlert.alert("Block User", `Block ${otherUser.name || 'this user'}?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Block", style: "destructive", onPress: async () => {
-          try {
-            await blockUser(user.uid, otherUser.id);
-            AppAlert.alert("Blocked", `${otherUser.name || 'User'} has been blocked.`);
-            router.back();
-          } catch (err) { AppAlert.alert("Error", "Failed to block user."); }
+    setTimeout(() => {
+      AppAlert.alert("Block User", `Block ${otherUser.name || 'this user'}?`, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block", style: "destructive", onPress: async () => {
+            try {
+              await blockUser(user.uid, otherUser.id);
+              AppAlert.alert("Blocked", `${otherUser.name || 'User'} has been blocked.`);
+              router.back();
+            } catch (err) { AppAlert.alert("Error", "Failed to block user."); }
+          },
         },
-      },
-    ]);
+      ]);
+    }, 300);
   };
 
   const handleUnblockUser = () => {
@@ -825,6 +828,7 @@ export default function ChatRoomScreen() {
     onMessageLongPress: handleMessageLongPress,
     borderColor, setRoomStatus, setRequestedBy,
     onImagePress: setPreviewImage, onReact: handleReact,
+    isBlocked, isBlockedBy,
   };
 
   return (
@@ -974,7 +978,7 @@ function ChatBody({
   roomStatus, requestedBy, replyingTo, setReplyingTo,
   newMessage, setNewMessage, isUploading, handleSend, pickImage,
   onMessagePress, onMessageLongPress, borderColor, setRoomStatus, setRequestedBy,
-  onImagePress, onReact,
+  onImagePress, onReact, isBlocked, isBlockedBy,
 }: any) {
   return (
     <>
@@ -1060,7 +1064,18 @@ function ChatBody({
         )
       )}
 
-      {/* Input area */}
+      {/* Blocked Banner — replaces the composer when either side has blocked the other */}
+      {(isBlocked || isBlockedBy) ? (
+        <View
+          className="px-4 py-4 items-center justify-center"
+          style={{ borderTopWidth: 1, borderTopColor: borderColor, backgroundColor: '#F2F2F2' }}
+        >
+          <Text variant="caption" className="font-sans-semibold text-center" style={{ color: '#000000' }}>
+            {isBlocked ? 'You blocked this person' : 'This person blocked you'}
+          </Text>
+        </View>
+      ) : (
+      /* Input area */
       <View
         className="bg-surface dark:bg-surface-dark"
         style={{ borderTopWidth: 1, borderTopColor: borderColor }}
@@ -1115,6 +1130,7 @@ function ChatBody({
           </TouchableOpacity>
         </View>
       </View>
+      )}
     </>
   );
 }
