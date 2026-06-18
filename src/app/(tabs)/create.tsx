@@ -136,6 +136,7 @@ export default function CreateScreen() {
   const inputText    = isDark ? '#F5F5F7' : '#1A1A1C';
   const placeholderClr = isDark ? '#636366' : '#9CA3AF';
   const borderClr    = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+  const chipUnselectedClr = isDark ? '#D1D5DB' : '#374151';
 
   return (
     <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={['top']}>
@@ -233,9 +234,11 @@ export default function CreateScreen() {
                     <Check size={13} color="#FFF" />
                   </View>
                 )}
-                <Text variant="caption" className={`text-[13px] font-sans-medium ${
-                  category === cat ? 'text-white' : 'text-content-secondary'
-                }`}>
+                <Text
+                  variant="caption"
+                  className="text-[13px] font-sans-medium"
+                  style={{ color: category === cat ? '#FFFFFF' : chipUnselectedClr }}
+                >
                   {cat}
                 </Text>
               </TouchableOpacity>
@@ -259,9 +262,11 @@ export default function CreateScreen() {
                     : 'bg-surface-soft dark:bg-surface-dark-secondary'
                 }`}
               >
-                <Text variant="caption" className={`text-[13px] font-sans-medium ${
-                  condition === cond ? 'text-white' : 'text-content-secondary'
-                }`}>
+                <Text
+                  variant="caption"
+                  className="text-[13px] font-sans-medium"
+                  style={{ color: condition === cond ? '#FFFFFF' : chipUnselectedClr }}
+                >
                   {cond}
                 </Text>
               </TouchableOpacity>
@@ -410,10 +415,18 @@ export default function CreateScreen() {
                 <MapPin size={16} color={meetupAvailable ? '#FFF' : '#8E8E93'} />
               </View>
               <View className="flex-1">
-                <Text variant="caption" className="text-[13px] font-sans-semibold text-content-primary">
+                <Text
+                  variant="caption"
+                  className="text-[13px] font-sans-semibold"
+                  style={{ color: inputText }}
+                >
                   School Meetup
                 </Text>
-                <Text variant="caption" className="text-content-tertiary text-[9px] uppercase font-sans-semibold tracking-widest">
+                <Text
+                  variant="caption"
+                  className="text-[9px] uppercase font-sans-semibold tracking-widest"
+                  style={{ color: placeholderClr }}
+                >
                   Official points
                 </Text>
               </View>
@@ -436,10 +449,18 @@ export default function CreateScreen() {
                 <Truck size={16} color={deliveryAvailable ? '#FFF' : '#8E8E93'} />
               </View>
               <View className="flex-1">
-                <Text variant="caption" className="text-[13px] font-sans-semibold text-content-primary">
+                <Text
+                  variant="caption"
+                  className="text-[13px] font-sans-semibold"
+                  style={{ color: inputText }}
+                >
                   Local Delivery
                 </Text>
-                <Text variant="caption" className="text-content-tertiary text-[9px] uppercase font-sans-semibold tracking-widest">
+                <Text
+                  variant="caption"
+                  className="text-[9px] uppercase font-sans-semibold tracking-widest"
+                  style={{ color: placeholderClr }}
+                >
                   Porter / Instamart
                 </Text>
               </View>
@@ -461,7 +482,7 @@ export default function CreateScreen() {
           {isSubmitting ? (
             <ActivityIndicator color="#FFF" size="small" />
           ) : (
-            <Text variant="label" className="text-white font-sans-semibold">
+            <Text variant="label" className="font-sans-semibold" style={{ color: '#FFFFFF' }}>
               Submit Listing
             </Text>
           )}
