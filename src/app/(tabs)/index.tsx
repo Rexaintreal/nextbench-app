@@ -249,7 +249,11 @@ export default function FeedScreen() {
           ? ((item.upvotesCount || 0) + (item.repliesCount || 0) * 1.5) / hoursAgo
           : 0;
         score += Math.min(velocity * 2, 25);
-        const timeMultiplier = 1 / Math.pow(1 + hoursAgo * 0.05, 1.2);
+        // Recency-weighted decay: newer posts are favored more aggressively.
+        // Higher rate (0.12 vs old 0.05) and steeper exponent (1.6 vs old 1.2)
+        // mean a post's score fades faster as it ages, so freshness now
+        // competes more strongly against pure engagement totals.
+        const timeMultiplier = 1 / Math.pow(1 + hoursAgo * 0.12, 1.6);
         const finalScore = score * timeMultiplier;
 
         return { item, finalScore, hoursAgo };
