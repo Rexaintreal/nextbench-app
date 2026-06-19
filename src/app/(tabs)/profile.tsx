@@ -10,7 +10,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useTheme } from "@/providers/ThemeProvider";
 import {
   Settings, ShieldCheck, MapPin, Grid, MessageSquare,
-  Bell, Heart, X, Bookmark, Camera, Trash2,
+  Bell, Heart, X, Bookmark, Camera, SlidersHorizontal,
 } from "lucide-react-native";
 import firestore from "@react-native-firebase/firestore";
 import * as ImagePicker from "expo-image-picker";
@@ -23,12 +23,15 @@ import { AppAlert } from "@/components/ui/AppAlert";
 const COVER_HEIGHT = 120;
 const AVATAR_SIZE  = 76;
 
+type ListingSort = "newest" | "oldest" | "price_asc" | "price_desc";
+type PostSort    = "newest" | "oldest" | "top";
+
 export default function ProfileScreen() {
   const { user, userData } = useAuth();
   const { isDark } = useTheme();
-  const iconColor = isDark ? "#F5F5F7" : "#1A1A1C";
-  const cardBg    = isDark ? "#1C1C1E" : "#FFFFFF";
-  const softBg    = isDark ? "#2C2C2E" : "#F5F5F7";
+  const iconColor   = isDark ? "#F5F5F7" : "#1A1A1C";
+  const cardBg      = isDark ? "#1C1C1E" : "#FFFFFF";
+  const softBg      = isDark ? "#2C2C2E" : "#F5F5F7";
   const borderColor = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
 
   const [viewMode, setViewMode] = useState<"listings" | "posts" | "playlist">("listings");
@@ -42,11 +45,39 @@ export default function ProfileScreen() {
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
 
+  // Sort state
+  const [sortListings, setSortListings] = useState<ListingSort>("newest");
+  const [sortPosts, setSortPosts]       = useState<PostSort>("newest");
+  const [sortSaved, setSortSaved]       = useState<PostSort>("newest");
+
   const { followersCount, followingCount } = useFollowCounts(user?.uid);
 
   const [modalType, setModalType]   = useState<"followers" | "following" | null>(null);
   const [modalUsers, setModalUsers] = useState<any[]>([]);
   const [modalLoading, setModalLoading] = useState(false);
+
+  // ── Sorted derived arrays ─────────────────────────────────────────────────
+  const sortedListings = [...myListings].sort((a, b) => {
+    if (sortListings === "newest")     return ((b as any).createdAt?.seconds ?? 0) - ((a as any).createdAt?.seconds ?? 0);
+    if (sortListings === "oldest")     return ((a as any).createdAt?.seconds ?? 0) - ((b as any).createdAt?.seconds ?? 0);
+    if (sortListings === "price_asc")  return ((a as any).price ?? 0) - ((b as any).price ?? 0);
+    if (sortListings === "price_desc") return ((b as any).price ?? 0) - ((a as any).price ?? 0);
+    return 0;
+  });
+
+  const sortedPosts = [...myPosts].sort((a, b) => {
+    if (sortPosts === "newest") return ((b as any).createdAt?.seconds ?? 0) - ((a as any).createdAt?.seconds ?? 0);
+    if (sortPosts === "oldest") return ((a as any).createdAt?.seconds ?? 0) - ((b as any).createdAt?.seconds ?? 0);
+    if (sortPosts === "top")    return ((b as any).upvotes ?? 0) - ((a as any).upvotes ?? 0);
+    return 0;
+  });
+
+  const sortedSaved = [...savedPosts].sort((a, b) => {
+    if (sortSaved === "newest") return ((b as any).createdAt?.seconds ?? 0) - ((a as any).createdAt?.seconds ?? 0);
+    if (sortSaved === "oldest") return ((a as any).createdAt?.seconds ?? 0) - ((b as any).createdAt?.seconds ?? 0);
+    if (sortSaved === "top")    return ((b as any).upvotes ?? 0) - ((a as any).upvotes ?? 0);
+    return 0;
+  });
 
   const fetchUsersList = async (type: "followers" | "following") => {
     if (!user) return;
@@ -122,6 +153,7 @@ export default function ProfileScreen() {
     } catch { AppAlert.alert("Upload failed", "Could not update cover photo."); }
     finally { setIsUploadingCover(false); }
   };
+
   const handleDeletePost = (postId: string) => {
     AppAlert.alert(
       "Delete post?",
@@ -142,6 +174,7 @@ export default function ProfileScreen() {
       ]
     );
   };
+
   const handleDeleteListing = (productId: string) => {
     AppAlert.alert(
       "Delete listing?",
@@ -169,27 +202,51 @@ export default function ProfileScreen() {
     </SafeAreaView>
   );
 
-  const nameInitial = userData.name?.[0]?.toUpperCase() || "?";
+  const nameInitial  = userData.name?.[0]?.toUpperCase() || "?";
   const pillTrackBg  = isDark ? "#1C1C1E" : "#F2F2F7";
   const activePillBg = isDark ? "#2C2C2E" : "#FFFFFF";
 
   const tabs = [
-    { key: "listings"  as const, label: "Listings", Icon: Grid,          activeColor: "#14B8A6" },
-    { key: "posts"     as const, label: "Posts",    Icon: MessageSquare, activeColor: "#FF375F" },
-    { key: "playlist"  as const, label: "Saved",    Icon: Bookmark,      activeColor: "#9333EA" },
+    { key: "listings" as const, label: "Listings", Icon: Grid,          activeColor: "#14B8A6" },
+    { key: "posts"    as const, label: "Posts",    Icon: MessageSquare, activeColor: "#FF375F" },
+    { key: "playlist" as const, label: "Saved",    Icon: Bookmark,      activeColor: "#9333EA" },
   ];
+
+  // ── Sort pill configs ─────────────────────────────────────────────────────
+  const listingSortOptions: { key: ListingSort; label: string }[] = [
+    { key: "newest",     label: "Newest" },
+    { key: "oldest",     label: "Oldest" },
+    { key: "price_asc",  label: "Price: Low → High" },
+    { key: "price_desc", label: "Price: High → Low" },
+  ];
+
+  const postSortOptions: { key: PostSort; label: string }[] = [
+    { key: "newest", label: "Newest" },
+    { key: "oldest", label: "Oldest" },
+    { key: "top",    label: "Top" },
+  ];
+
+  // Active sort config per tab
+  const activeSortOptions = viewMode === "listings" ? listingSortOptions : postSortOptions;
+  const activeSort        = viewMode === "listings" ? sortListings : viewMode === "posts" ? sortPosts : sortSaved;
+  const activeColor       = viewMode === "listings" ? "#14B8A6" : viewMode === "posts" ? "#FF375F" : "#9333EA";
+
+  const handleSortChange = (key: string) => {
+    if (viewMode === "listings") setSortListings(key as ListingSort);
+    else if (viewMode === "posts") setSortPosts(key as PostSort);
+    else setSortSaved(key as PostSort);
+  };
 
   const renderContent = () => {
     if (viewMode === "listings") {
       if (loadingListings) return <ActivityIndicator color="#14B8A6" style={{ marginTop: 32 }} />;
-      if (!myListings.length) return (
+      if (!sortedListings.length) return (
         <View style={{ alignItems: "center", paddingTop: 48 }}>
           <Grid size={32} color={isDark ? "#2C2C2E" : "#E5E5EA"} />
           <Text variant="bodySmall" className="text-content-tertiary mt-3">No listings yet</Text>
         </View>
       );
-      
-      return myListings.map(item => (
+      return sortedListings.map(item => (
         <ProductCard key={item.id} product={item} isWishlisted={false}
           onPress={() => router.push(`/product/${item.id}` as any)} onToggleWishlist={() => {}}
           onDelete={() => handleDeleteListing(item.id)} />
@@ -197,13 +254,13 @@ export default function ProfileScreen() {
     }
     if (viewMode === "posts") {
       if (loadingPosts) return <ActivityIndicator color="#FF375F" style={{ marginTop: 32 }} />;
-      if (!myPosts.length) return (
+      if (!sortedPosts.length) return (
         <View style={{ alignItems: "center", paddingTop: 48 }}>
           <MessageSquare size={32} color={isDark ? "#2C2C2E" : "#E5E5EA"} />
           <Text variant="bodySmall" className="text-content-tertiary mt-3">No posts yet</Text>
         </View>
       );
-      return myPosts.map(post => (
+      return sortedPosts.map(post => (
         <PostCard key={post.id} post={post} hasUpvoted={false}
           onPress={() => router.push(`/post/${post.id}` as any)}
           onDelete={() => handleDeletePost(post.id)} />
@@ -211,13 +268,13 @@ export default function ProfileScreen() {
     }
     if (viewMode === "playlist") {
       if (loadingPlaylist) return <ActivityIndicator color="#9333EA" style={{ marginTop: 32 }} />;
-      if (!savedPosts.length) return (
+      if (!sortedSaved.length) return (
         <View style={{ alignItems: "center", paddingTop: 48 }}>
           <Bookmark size={32} color={isDark ? "#2C2C2E" : "#E5E5EA"} />
           <Text variant="bodySmall" className="text-content-tertiary mt-3">No saved posts yet</Text>
         </View>
       );
-      return savedPosts.map(post => (
+      return sortedSaved.map(post => (
         <PostCard key={post.id} post={post} hasUpvoted={false} isSaved={true}
           onPress={() => router.push(`/post/${post.id}` as any)} />
       ));
@@ -351,7 +408,7 @@ export default function ProfileScreen() {
 
         {/* ── Pill tabs ── */}
         <View style={{ flexDirection: "row", marginHorizontal: 20, marginTop: 12, marginBottom: 4, borderRadius: 12, padding: 4, backgroundColor: pillTrackBg }}>
-          {tabs.map(({ key, label, Icon, activeColor }) => {
+          {tabs.map(({ key, label, Icon, activeColor: tabColor }) => {
             const isActive = viewMode === key;
             return (
               <TouchableOpacity
@@ -363,14 +420,58 @@ export default function ProfileScreen() {
                   backgroundColor: isActive ? activePillBg : "transparent",
                 }}
               >
-                <Icon size={15} color={isActive ? activeColor : "#8E8E93"} />
-                <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: isActive ? activeColor : "#8E8E93" }}>
+                <Icon size={15} color={isActive ? tabColor : "#8E8E93"} />
+                <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: isActive ? tabColor : "#8E8E93" }}>
                   {label}
                 </Text>
               </TouchableOpacity>
             );
           })}
         </View>
+
+        {/* ── Sort pills ── */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            gap: 8,
+            flexDirection: "row",
+            alignItems: "center",
+          }}
+        >
+          <SlidersHorizontal size={15} color={isDark ? "#636366" : "#8E8E93"} style={{ marginRight: 2 }} />
+          {activeSortOptions.map(({ key, label }) => {
+            const isActive = activeSort === key;
+            return (
+              <TouchableOpacity
+                key={key}
+                onPress={() => handleSortChange(key)}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 6,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: isActive ? activeColor : borderColor,
+                  backgroundColor: isActive
+                    ? `${activeColor}18`
+                    : softBg,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontFamily: "Inter_600SemiBold",
+                    color: isActive ? activeColor : isDark ? "#8E8E93" : "#636366",
+                  }}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
 
         {/* Content */}
         <View style={{ paddingTop: 8 }}>

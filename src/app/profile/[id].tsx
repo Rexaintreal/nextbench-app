@@ -24,7 +24,7 @@ import { AppAlert } from "@/components/ui/AppAlert";
 import {
   ChevronLeft, ShieldCheck, MapPin, Grid,
   MessageSquare, MoreHorizontal, UserPlus,
-  UserMinus, Ban, Camera,X
+  UserMinus, Ban, Camera, X, SlidersHorizontal,
 } from "lucide-react-native";
 import firestore from "@react-native-firebase/firestore";
 import * as ImagePicker from "expo-image-picker";
@@ -38,6 +38,9 @@ import ReportModal from "@/components/ui/ReportModal";
 import { uploadCoverPhotoMobile } from "@/services/firebase/storage";
 
 const COVER_HEIGHT = 160;
+
+type ListingSort = "newest" | "oldest" | "price_asc" | "price_desc";
+type PostSort    = "newest" | "oldest" | "top";
 
 export default function OtherProfileScreen() {
   const { id: profileId } = useLocalSearchParams<{ id: string }>();
@@ -64,11 +67,31 @@ export default function OtherProfileScreen() {
   // Cover photo state
   const [isUploadingCover, setIsUploadingCover] = useState(false);
 
+  // Sort state
+  const [sortListings, setSortListings] = useState<ListingSort>("newest");
+  const [sortPosts, setSortPosts]       = useState<PostSort>("newest");
+
   const { isFollowing, isFollowedBy, isFriend } = useFollowStatus(profileId);
   const { followersCount, followingCount }       = useFollowCounts(profileId);
   const { isBlocked, isBlockedBy }               = useBlockStatus(profileId);
 
   const isOwnProfile = user?.uid === profileId;
+
+  // ── Sorted derived arrays ─────────────────────────────────────────────────
+  const sortedListings = [...listings].sort((a, b) => {
+    if (sortListings === "newest")     return ((b as any).createdAt?.seconds ?? 0) - ((a as any).createdAt?.seconds ?? 0);
+    if (sortListings === "oldest")     return ((a as any).createdAt?.seconds ?? 0) - ((b as any).createdAt?.seconds ?? 0);
+    if (sortListings === "price_asc")  return ((a as any).price ?? 0) - ((b as any).price ?? 0);
+    if (sortListings === "price_desc") return ((b as any).price ?? 0) - ((a as any).price ?? 0);
+    return 0;
+  });
+
+  const sortedPosts = [...posts].sort((a, b) => {
+    if (sortPosts === "newest") return ((b as any).createdAt?.seconds ?? 0) - ((a as any).createdAt?.seconds ?? 0);
+    if (sortPosts === "oldest") return ((a as any).createdAt?.seconds ?? 0) - ((b as any).createdAt?.seconds ?? 0);
+    if (sortPosts === "top")    return ((b as any).upvotes ?? 0) - ((a as any).upvotes ?? 0);
+    return 0;
+  });
 
   useEffect(() => {
     if (!profileId) return;
@@ -100,6 +123,7 @@ export default function OtherProfileScreen() {
       }, (err) => { console.error(err); setLoadingPosts(false); });
     return () => unsub();
   }, [profileId]);
+
   const fetchUsersList = async (type: "followers" | "following") => {
     if (!profileId) return;
     setModalLoading(true); setModalType(type); setModalUsers([]);
@@ -114,6 +138,7 @@ export default function OtherProfileScreen() {
     } catch (e) { console.error(e); }
     finally { setModalLoading(false); }
   };
+
   // ── Cover photo upload ───────────────────────────────────────────────────────
   const handleEditCover = async () => {
     if (!isOwnProfile || !user) return;
@@ -260,6 +285,20 @@ export default function OtherProfileScreen() {
   }
 
   const nameInitial = profileData.name?.[0]?.toUpperCase() || "?";
+
+  // ── Sort pill configs ─────────────────────────────────────────────────────
+  const listingSortOptions: { key: ListingSort; label: string }[] = [
+    { key: "newest",     label: "Newest" },
+    { key: "oldest",     label: "Oldest" },
+    { key: "price_asc",  label: "Price: Low → High" },
+    { key: "price_desc", label: "Price: High → Low" },
+  ];
+
+  const postSortOptions: { key: PostSort; label: string }[] = [
+    { key: "newest", label: "Newest" },
+    { key: "oldest", label: "Oldest" },
+    { key: "top",    label: "Top" },
+  ];
 
   return (
     <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark" edges={["top"]}>
@@ -544,9 +583,10 @@ export default function OtherProfileScreen() {
           </View>
         )}
 
-        {/* ── Content Toggle + Listings/Posts ── */}
+        {/* ── Content Toggle + Sort + Listings/Posts ── */}
         {!isBlocked && (
           <>
+            {/* Tab bar */}
             <View
               className="flex-row bg-surface dark:bg-surface-dark"
               style={{ borderTopWidth: 1, borderBottomWidth: 1, borderColor: borderColor }}
@@ -582,18 +622,106 @@ export default function OtherProfileScreen() {
               ))}
             </View>
 
+            {/* Sort pills */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{
+                paddingHorizontal: 16,
+                paddingVertical: 10,
+                gap: 8,
+                flexDirection: "row",
+                alignItems: "center",
+              }}
+              style={{
+                backgroundColor: surfaceBg,
+                borderBottomWidth: 1,
+                borderBottomColor: borderColor,
+              }}
+            >
+              <SlidersHorizontal
+                size={15}
+                color={isDark ? "#636366" : "#8E8E93"}
+                style={{ marginRight: 2 }}
+              />
+
+              {viewMode === "listings"
+                ? listingSortOptions.map(({ key, label }) => {
+                    const active = sortListings === key;
+                    return (
+                      <TouchableOpacity
+                        key={key}
+                        onPress={() => setSortListings(key)}
+                        style={{
+                          paddingHorizontal: 14,
+                          paddingVertical: 6,
+                          borderRadius: 999,
+                          borderWidth: 1,
+                          borderColor: active ? "#14B8A6" : borderColor,
+                          backgroundColor: active
+                            ? isDark ? "rgba(20,184,166,0.15)" : "rgba(20,184,166,0.08)"
+                            : isDark ? "#2C2C2E" : "#F5F5F7",
+                        }}
+                      >
+                        <Text
+                          variant="caption"
+                          style={{
+                            fontSize: 12,
+                            fontFamily: "Inter_600SemiBold",
+                            color: active ? "#14B8A6" : isDark ? "#8E8E93" : "#636366",
+                          }}
+                        >
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })
+                : postSortOptions.map(({ key, label }) => {
+                    const active = sortPosts === key;
+                    return (
+                      <TouchableOpacity
+                        key={key}
+                        onPress={() => setSortPosts(key)}
+                        style={{
+                          paddingHorizontal: 14,
+                          paddingVertical: 6,
+                          borderRadius: 999,
+                          borderWidth: 1,
+                          borderColor: active ? "#F43F5E" : borderColor,
+                          backgroundColor: active
+                            ? isDark ? "rgba(244,63,94,0.15)" : "rgba(244,63,94,0.08)"
+                            : isDark ? "#2C2C2E" : "#F5F5F7",
+                        }}
+                      >
+                        <Text
+                          variant="caption"
+                          style={{
+                            fontSize: 12,
+                            fontFamily: "Inter_600SemiBold",
+                            color: active ? "#F43F5E" : isDark ? "#8E8E93" : "#636366",
+                          }}
+                        >
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })
+              }
+            </ScrollView>
+
+            {/* Content */}
             <View className="pt-4 bg-surface dark:bg-surface-dark">
               {viewMode === "listings" ? (
                 loadingListings ? (
                   <ActivityIndicator color="#14B8A6" style={{ marginTop: 32 }} />
-                ) : listings.length === 0 ? (
+                ) : sortedListings.length === 0 ? (
                   <View className="items-center justify-center pt-12">
                     <Text variant="body" className="text-content-secondary dark:text-ink-dark-muted">
                       No listings yet.
                     </Text>
                   </View>
                 ) : (
-                  listings.map((item) => (
+                  sortedListings.map((item) => (
                     <ProductCard
                       key={item.id}
                       product={item}
@@ -605,14 +733,14 @@ export default function OtherProfileScreen() {
                 )
               ) : loadingPosts ? (
                 <ActivityIndicator color="#F43F5E" style={{ marginTop: 32 }} />
-              ) : posts.length === 0 ? (
+              ) : sortedPosts.length === 0 ? (
                 <View className="items-center justify-center pt-12">
                   <Text variant="body" className="text-content-secondary dark:text-ink-dark-muted">
                     No posts yet.
                   </Text>
                 </View>
               ) : (
-                posts.map((post) => (
+                sortedPosts.map((post) => (
                   <PostCard
                     key={post.id}
                     post={post}
@@ -634,50 +762,51 @@ export default function OtherProfileScreen() {
           contentId={profileId}
         />
       )}
+
       <Modal visible={modalType !== null} transparent animationType="slide" onRequestClose={() => setModalType(null)}>
-      <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.50)" }}>
-        <View style={{ backgroundColor: surfaceBg, height: "80%", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <Text variant="h2" style={{ fontSize: 20 }}>{modalType === "followers" ? "Followers" : "Following"}</Text>
-            <TouchableOpacity onPress={() => setModalType(null)} style={{ padding: 8, backgroundColor: isDark ? "#2C2C2E" : "#F5F5F7", borderRadius: 999 }}>
-              <X size={18} color={iconColor} />
-            </TouchableOpacity>
-          </View>
-          {modalLoading
-            ? <ActivityIndicator color="#14B8A6" style={{ marginTop: 32 }} />
-            : modalUsers.length === 0
-              ? <View style={{ alignItems: "center", paddingTop: 48 }}>
-                  <Text variant="caption" className="text-content-tertiary">
-                    {modalType === "followers" ? "No followers yet." : "Not following anyone yet."}
-                  </Text>
-                </View>
-              : <ScrollView showsVerticalScrollIndicator={false}>
-                  {modalUsers.map(u => (
-                    <TouchableOpacity
-                      key={u.id}
-                      onPress={() => { setModalType(null); router.push(`/profile/${u.id}` as any); }}
-                      style={{ flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: borderColor }}
-                    >
-                      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? "#2C2C2E" : "#F5F5F7", alignItems: "center", justifyContent: "center", marginRight: 12, overflow: "hidden" }}>
-                        {u.profilePicture
-                          ? <Image source={{ uri: u.profilePicture }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
-                          : <Text variant="h4" className="text-content-secondary">{u.name?.[0]?.toUpperCase() || "?"}</Text>
-                        }
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                          <Text variant="label" style={{ fontFamily: "Inter_600SemiBold" }}>{u.name}</Text>
-                          {u.verified && <ShieldCheck size={13} color="#14B8A6" />}
+        <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.50)" }}>
+          <View style={{ backgroundColor: surfaceBg, height: "80%", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <Text variant="h2" style={{ fontSize: 20 }}>{modalType === "followers" ? "Followers" : "Following"}</Text>
+              <TouchableOpacity onPress={() => setModalType(null)} style={{ padding: 8, backgroundColor: isDark ? "#2C2C2E" : "#F5F5F7", borderRadius: 999 }}>
+                <X size={18} color={iconColor} />
+              </TouchableOpacity>
+            </View>
+            {modalLoading
+              ? <ActivityIndicator color="#14B8A6" style={{ marginTop: 32 }} />
+              : modalUsers.length === 0
+                ? <View style={{ alignItems: "center", paddingTop: 48 }}>
+                    <Text variant="caption" className="text-content-tertiary">
+                      {modalType === "followers" ? "No followers yet." : "Not following anyone yet."}
+                    </Text>
+                  </View>
+                : <ScrollView showsVerticalScrollIndicator={false}>
+                    {modalUsers.map(u => (
+                      <TouchableOpacity
+                        key={u.id}
+                        onPress={() => { setModalType(null); router.push(`/profile/${u.id}` as any); }}
+                        style={{ flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: borderColor }}
+                      >
+                        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? "#2C2C2E" : "#F5F5F7", alignItems: "center", justifyContent: "center", marginRight: 12, overflow: "hidden" }}>
+                          {u.profilePicture
+                            ? <Image source={{ uri: u.profilePicture }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+                            : <Text variant="h4" className="text-content-secondary">{u.name?.[0]?.toUpperCase() || "?"}</Text>
+                          }
                         </View>
-                        {u.username && <Text variant="caption" className="text-content-tertiary">@{u.username}</Text>}
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-          }
+                        <View style={{ flex: 1 }}>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                            <Text variant="label" style={{ fontFamily: "Inter_600SemiBold" }}>{u.name}</Text>
+                            {u.verified && <ShieldCheck size={13} color="#14B8A6" />}
+                          </View>
+                          {u.username && <Text variant="caption" className="text-content-tertiary">@{u.username}</Text>}
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+            }
+          </View>
         </View>
-      </View>
-    </Modal>
+      </Modal>
     </SafeAreaView>
   );
 }
