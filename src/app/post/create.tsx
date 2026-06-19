@@ -20,10 +20,11 @@ import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
-import { X, ImagePlus, ChevronDown, BarChart3, Plus, Trash2 } from "lucide-react-native";
+import { X, ImagePlus, ChevronDown, BarChart3, Plus, Trash2, Film } from "lucide-react-native";
 import firestore, { Timestamp } from "@react-native-firebase/firestore";
-import { uploadPostImageMobile } from "@/lib/storage";
+import { uploadPostImageMobile, uploadPostVideoMobile } from "@/lib/storage";
 import { AppAlert } from '@/components/ui/AppAlert';
+import Video from "react-native-video";
 
 
 const POST_TYPES = [
@@ -51,6 +52,7 @@ export default function PostCreateScreen() {
   const [type, setType] = useState<string>("others");
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [images, setImages] = useState<string[]>([]);
+  const [video, setVideo] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTypeMenu, setShowTypeMenu] = useState(false);
 
@@ -93,6 +95,7 @@ export default function PostCreateScreen() {
       quality: 0.8,
     });
     if (!result.canceled) {
+      setVideo(null); // images and video are mutually exclusive
       setImages((prev) => [...prev, ...result.assets.map((a) => a.uri)]);
     }
   };
@@ -100,6 +103,22 @@ export default function PostCreateScreen() {
   const removeImage = (index: number) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
+
+  // ── Video picking ───────────────────────────────────
+  const pickVideo = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      allowsEditing: true,
+      quality: 1,
+      videoMaxDuration: 120,
+    });
+    if (!result.canceled) {
+      setImages([]); // images and video are mutually exclusive
+      setVideo(result.assets[0].uri);
+    }
+  };
+
+  const removeVideo = () => setVideo(null);
 
   // ── Submit ──────────────────────────────────────────
   const handleSubmit = async () => {
@@ -112,11 +131,18 @@ export default function PostCreateScreen() {
 
     setIsSubmitting(true);
     try {
+      // Upload images
       let imageUrls: string[] = [];
       if (images.length > 0) {
         imageUrls = await Promise.all(
           images.map((uri) => uploadPostImageMobile(uri))
         );
+      }
+
+      // Upload video
+      let videoUrl: string | null = null;
+      if (video) {
+        videoUrl = await uploadPostVideoMobile(video);
       }
 
       let pollPayload: object | null = null;
@@ -137,11 +163,7 @@ export default function PostCreateScreen() {
         isAnonymous: type === "confession" ? isAnonymous : false,
         authorId: user.uid,
         authorName: userData.name || "Unknown",
-        authorProfilePicture: userData.profilePicture || null,
         school: userData.school || "Unknown",
-        city: userData.city || null,
-        imageUrl: imageUrls[0] || null,
-        imageUrls,
         upvotesCount: 0,
         repliesCount: 0,
         status: "approved",
@@ -149,13 +171,24 @@ export default function PostCreateScreen() {
         updatedAt: firestore.FieldValue.serverTimestamp(),
       };
 
+      // Only attach optional fields when they actually have a value.
+      // Sending them as `null` trips the `data.imageUrl is string` check in
+      // firestore.rules (isValidPost) since that field doesn't allow null,
+      // which is what was causing the permission-denied error.
+      if (userData.profilePicture) payload.authorProfilePicture = userData.profilePicture;
+      if (userData.city) payload.city = userData.city;
+      if (imageUrls.length > 0) {
+        payload.imageUrl = imageUrls[0];
+        payload.imageUrls = imageUrls;
+      }
+      if (videoUrl) payload.videoUrl = videoUrl;
       if (pollPayload) payload.poll = pollPayload;
 
       await firestore().collection("posts").add(payload);
       router.back();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating post:", error);
-      AppAlert.alert("Failed to create post. Please try again.");
+      AppAlert.alert("Failed to create post", error?.message ?? "Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -347,6 +380,22 @@ export default function PostCreateScreen() {
             </View>
           )}
 
+          {/* ── Video preview ── */}
+          {video && (
+            <View style={{ marginTop: 20, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000', aspectRatio: 16/9 }}>
+              <Video
+                source={{ uri: video }}
+                style={{ width: '100%', height: '100%' }}
+                controls
+                resizeMode="contain"
+                paused
+              />
+              <TouchableOpacity onPress={removeVideo} style={{ position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 999, padding: 4 }}>
+                <X size={14} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* ── Poll section ── */}
           <View
             style={{
@@ -521,15 +570,40 @@ export default function PostCreateScreen() {
             paddingBottom: Math.max(insets.bottom + 32, 32),
           }}
         >
+          {/* Image picker — disabled when a video is selected */}
           <TouchableOpacity
             onPress={pickImage}
-            disabled={images.length >= 4}
-            className="mr-4"
+            disabled={images.length >= 4 || !!video}
             style={{ padding: 10, margin: -10 }}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <ImagePlus size={24} color={images.length >= 4 ? (isDark ? "#3A3A3C" : "#D1D5DB") : "#14B8A6"} />
+            <ImagePlus
+              size={24}
+              color={
+                images.length >= 4 || !!video
+                  ? isDark ? "#3A3A3C" : "#D1D5DB"
+                  : "#14B8A6"
+              }
+            />
           </TouchableOpacity>
+
+          {/* Video picker — disabled when images are selected */}
+          <TouchableOpacity
+            onPress={pickVideo}
+            disabled={images.length > 0 || !!video}
+            style={{ padding: 10, margin: -10, marginLeft: 8 }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+          <Film
+            size={24}
+            color={
+              images.length > 0 || !!video
+                ? isDark ? "#3A3A3C" : "#D1D5DB"
+                : "#14B8A6"
+            }
+          />
+          </TouchableOpacity>
+
           <View className="flex-1" />
           <Text variant="caption" className="text-content-tertiary dark:text-ink-dark-faint">
             {content.length} / 5000

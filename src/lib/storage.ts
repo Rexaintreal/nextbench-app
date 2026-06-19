@@ -57,3 +57,35 @@ export async function uploadPostImageMobile(localUri: string): Promise<string> {
     `nextbench/posts/${Date.now()}`
   );
 }
+
+export async function uploadPostVideoMobile(localUri: string): Promise<string> {
+  const CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+
+  if (!CLOUD_NAME || !UPLOAD_PRESET)
+    throw new Error('Cloudinary env vars missing');
+
+  const filename = localUri.split('/').pop() || 'video.mp4';
+  const match = /\.(\w+)$/.exec(filename);
+  const type = match ? `video/${match[1]}` : 'video/mp4';
+
+  const formData = new FormData();
+  formData.append('file', { uri: localUri, name: filename, type } as any);
+  formData.append('upload_preset', UPLOAD_PRESET);
+  formData.append('folder', `nextbench/posts/videos`);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    // Note: use /video/upload not /image/upload
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`);
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText).secure_url);
+      } else {
+        reject(new Error(`Video upload failed: ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error during video upload'));
+    xhr.send(formData);
+  });
+}

@@ -8,6 +8,7 @@ import PollDisplay from '@/components/ui/PollDisplay';
 import { ImageSlider } from '@/components/ui/ImageSlider';
 import { useTheme } from '@/providers/ThemeProvider';
 import PdfAttachment from '@/components/ui/PdfAttachment';
+import Video from "react-native-video";
 
 export interface Post {
   id: string;
@@ -21,6 +22,7 @@ export interface Post {
   type: string;
   imageUrl?: string;
   imageUrls?: string[];
+  videoUrl?: string | null;
   pdfUrl?: string;
   pdfPages?: number;
   upvotesCount: number;
@@ -160,7 +162,7 @@ export default function PostCard({ post, hasUpvoted, isSaved, onPress, onUpvote,
           <PollDisplay postId={post.id} poll={post.poll} compact />
         )}
 
-        {/* PDF attachment — shows file card, downloads & opens with native viewer on tap */}
+        {/* PDF attachment */}
         {post.pdfUrl && (
           <PdfAttachment
             pdfUrl={post.pdfUrl}
@@ -168,6 +170,19 @@ export default function PostCard({ post, hasUpvoted, isSaved, onPress, onUpvote,
             title={post.title}
             isDark={isDark}
           />
+        )}
+
+        {/* Video */}
+        {post.videoUrl && (
+          <View style={{ marginTop: 8, marginBottom: 12, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000', aspectRatio: 16/9 }}>
+            <Video
+              source={{ uri: post.videoUrl }}
+              style={{ width: '100%', height: '100%' }}
+              controls
+              resizeMode="contain"
+              paused
+            />
+          </View>
         )}
 
         {/* Actions */}

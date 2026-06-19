@@ -257,7 +257,7 @@ export default function SettingsScreen() {
         {/* App Version */}
         <View className="items-center mt-8">
           <Text variant="caption" className="text-content-tertiary">
-            NextBench v1.0.0
+            NextBench v1.0.5
           </Text>
         </View>
       </ScrollView>
