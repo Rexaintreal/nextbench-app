@@ -2,17 +2,21 @@
  * Storage utilities — Cloudinary uploads
  */
 
+export type UploadProgressCallback = (loadedBytes: number, totalBytes: number) => void;
+
 /**
  * Upload a local image URI to Cloudinary under a specific folder.
  * Used for profile pictures, post images, etc.
  *
- * @param localUri  - The local file URI (from expo-image-picker, etc.)
- * @param folder    - Cloudinary folder path, e.g. "nextbench/profiles"
- * @returns         - The uploaded image's secure_url
+ * @param localUri    - The local file URI (from expo-image-picker, etc.)
+ * @param folder      - Cloudinary folder path, e.g. "nextbench/profiles"
+ * @param onProgress  - Optional callback fired with (loadedBytes, totalBytes) as the upload streams
+ * @returns           - The uploaded image's secure_url
  */
 export async function uploadToCloudinary(
   localUri: string,
-  folder: string
+  folder: string,
+  onProgress?: UploadProgressCallback
 ): Promise<string> {
   const CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME;
   const UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
@@ -35,6 +39,11 @@ export async function uploadToCloudinary(
       'POST',
       `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`
     );
+    if (onProgress && xhr.upload) {
+      xhr.upload.onprogress = (event: any) => {
+        if (event.total) onProgress(event.loaded, event.total);
+      };
+    }
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(JSON.parse(xhr.responseText).secure_url);
@@ -51,14 +60,21 @@ export async function uploadToCloudinary(
  * Upload a post image to Cloudinary.
  * Kept for backwards-compatibility with existing post-creation flows.
  */
-export async function uploadPostImageMobile(localUri: string): Promise<string> {
+export async function uploadPostImageMobile(
+  localUri: string,
+  onProgress?: UploadProgressCallback
+): Promise<string> {
   return uploadToCloudinary(
     localUri,
-    `nextbench/posts/${Date.now()}`
+    `nextbench/posts/${Date.now()}`,
+    onProgress
   );
 }
 
-export async function uploadPostVideoMobile(localUri: string): Promise<string> {
+export async function uploadPostVideoMobile(
+  localUri: string,
+  onProgress?: UploadProgressCallback
+): Promise<string> {
   const CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME;
   const UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
@@ -78,6 +94,11 @@ export async function uploadPostVideoMobile(localUri: string): Promise<string> {
     const xhr = new XMLHttpRequest();
     // Note: use /video/upload not /image/upload
     xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`);
+    if (onProgress && xhr.upload) {
+      xhr.upload.onprogress = (event: any) => {
+        if (event.total) onProgress(event.loaded, event.total);
+      };
+    }
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(JSON.parse(xhr.responseText).secure_url);

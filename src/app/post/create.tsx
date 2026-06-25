@@ -2,7 +2,7 @@
  * Post Composer Screen
  */
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   ScrollView,
@@ -55,6 +55,21 @@ export default function PostCreateScreen() {
   const [video, setVideo] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTypeMenu, setShowTypeMenu] = useState(false);
+
+  // ── Upload progress (MB done / MB left) ─────────────
+  const [uploadProgress, setUploadProgress] = useState<{ loaded: number; total: number } | null>(null);
+  const uploadProgressMap = useRef<Map<string, { loaded: number; total: number }>>(new Map());
+
+  const reportUploadProgress = (key: string, loaded: number, total: number) => {
+    uploadProgressMap.current.set(key, { loaded, total });
+    let sumLoaded = 0;
+    let sumTotal = 0;
+    uploadProgressMap.current.forEach((v) => {
+      sumLoaded += v.loaded;
+      sumTotal += v.total;
+    });
+    setUploadProgress({ loaded: sumLoaded, total: sumTotal });
+  };
 
   // ── Poll state ──────────────────────────────────────
   const [pollEnabled, setPollEnabled] = useState(false);
@@ -130,19 +145,26 @@ export default function PostCreateScreen() {
     }
 
     setIsSubmitting(true);
+    uploadProgressMap.current = new Map();
     try {
       // Upload images
       let imageUrls: string[] = [];
       if (images.length > 0) {
         imageUrls = await Promise.all(
-          images.map((uri) => uploadPostImageMobile(uri))
+          images.map((uri, i) =>
+            uploadPostImageMobile(uri, (loaded, total) =>
+              reportUploadProgress(`img-${i}`, loaded, total)
+            )
+          )
         );
       }
 
       // Upload video
       let videoUrl: string | null = null;
       if (video) {
-        videoUrl = await uploadPostVideoMobile(video);
+        videoUrl = await uploadPostVideoMobile(video, (loaded, total) =>
+          reportUploadProgress('video', loaded, total)
+        );
       }
 
       let pollPayload: object | null = null;
@@ -216,32 +238,46 @@ export default function PostCreateScreen() {
 
           <Text variant="h4" className="dark:text-ink-dark">New Post</Text>
 
-          <TouchableOpacity
-            onPress={handleSubmit}
-            disabled={!canSubmit}
-            style={{
-              paddingHorizontal: 20,
-              paddingVertical: 8,
-              borderRadius: 999,
-              backgroundColor: canSubmit
-                ? "#14B8A6"
-                : isDark ? "#2C2C2E" : "#E5E5EA",
-            }}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#FFF" size="small" />
-            ) : (
-              <Text
-                variant="label"
-                style={{
-                  fontSize: 13,
-                  color: canSubmit ? "#FFFFFF" : isDark ? "#636366" : "#9CA3AF",
-                }}
-              >
+        {isSubmitting ? (
+          <View style={{ alignItems: 'flex-end', minWidth: 72 }}>
+            <Text style={{ color: teal, fontSize: 12, marginBottom: 3 }}>
+              {uploadProgress
+                ? `${Math.round((uploadProgress.loaded / uploadProgress.total) * 100)}%`
+                : 'Uploading...'}
+            </Text>
+            <View style={{
+              width: 72, height: 4, borderRadius: 2,
+              backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
+            }}>
+              <View style={{
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: teal,
+                width: uploadProgress
+                  ? `${Math.round((uploadProgress.loaded / uploadProgress.total) * 100)}%`
+                  : '2%', // ← non-zero so the bar is visible immediately
+              }} />
+            </View>
+          </View>
+          ) : (
+            <TouchableOpacity
+              onPress={handleSubmit}
+              disabled={!canSubmit}
+              style={{
+                paddingHorizontal: 20,
+                paddingVertical: 8,
+                borderRadius: 999,
+                backgroundColor: canSubmit ? "#14B8A6" : isDark ? "#2C2C2E" : "#E5E5EA",
+              }}
+            >
+              <Text variant="label" style={{
+                fontSize: 13,
+                color: canSubmit ? "#FFFFFF" : isDark ? "#636366" : "#9CA3AF",
+              }}>
                 Post
               </Text>
-            )}
-          </TouchableOpacity>
+            </TouchableOpacity>
+          )}
         </View>
 
         <ScrollView
