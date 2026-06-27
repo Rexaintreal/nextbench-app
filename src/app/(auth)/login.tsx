@@ -89,7 +89,7 @@ function OtpInput({
           maxLength={i === 0 ? 6 : 1} // Allow paste into first box
           textContentType="oneTimeCode" // iOS autofill from SMS
           autoComplete={i === 0 ? "one-time-code" : "off"} // Android autofill
-          className="w-11 h-14 text-center text-xl font-bold border border-content-secondary/15 rounded-xl bg-surface-base text-content"
+          className="w-11 h-14 text-center text-xl font-bold border border-content-secondary/15 rounded-xl bg-surface-card text-content shadow-sm"
           style={{
             fontSize: 22,
             fontWeight: "700",
@@ -263,8 +263,8 @@ export default function LoginScreen() {
 
         {/* Header */}
         <View className="mb-12 items-center">
-          <View className="mb-8 rounded-full bg-brand-mint/20 px-4 py-2">
-            <Text variant="caption" className="text-brand-teal uppercase tracking-widest font-bold">
+          <View className="mb-8 rounded-full bg-brand-mint/25 border border-brand-teal/30 px-4 py-2">
+            <Text variant="caption" className="text-brand-teal uppercase tracking-widest font-bold" style={{ color: "#2dd4bf" }}>
               Secured Portal
             </Text>
           </View>
@@ -335,7 +335,7 @@ export default function LoginScreen() {
                 returnKeyType="send"
                 onSubmitEditing={handleSendOtp}
                 editable={!isLoading}
-                className="w-full bg-surface-base border border-content-secondary/10 rounded-sm py-4 pl-11 pr-4 text-sm font-medium text-content"
+                className="w-full bg-surface-card border border-content-secondary/10 rounded-2xl py-4 pl-11 pr-4 text-sm font-medium text-content shadow-sm"
               />
             </View>
 
@@ -344,7 +344,7 @@ export default function LoginScreen() {
               onPress={handleSendOtp}
               disabled={isLoading || !email.trim()}
               activeOpacity={0.8}
-              className={`flex-row items-center justify-center w-full rounded-sm py-5 shadow-xl ${
+              className={`flex-row items-center justify-center w-full rounded-full py-5 shadow-xl ${
                 !isLoading && email.trim()
                   ? "bg-brand-pink shadow-brand-pink/10"
                   : "bg-brand-pink/50"
@@ -355,7 +355,7 @@ export default function LoginScreen() {
               ) : (
                 <View className="flex-row items-center gap-2">
                   <KeyRound color="white" size={14} />
-                  <Text variant="caption" className="text-white uppercase tracking-[0.2em] font-bold">
+                  <Text variant="caption" className="text-white uppercase tracking-[0.2em] font-bold" style={{ color: "#FFFFFF" }}>
                     Send One-Time Code
                   </Text>
                 </View>
@@ -376,14 +376,14 @@ export default function LoginScreen() {
               onPress={handleGoogleLogin}
               disabled={isLoading}
               activeOpacity={0.8}
-              className="flex-row items-center justify-center w-full rounded-sm border border-content-secondary/20 py-5"
+              className="flex-row items-center justify-center w-full rounded-full border border-white/25 bg-white/5 py-5"
             >
               {isGoogleLoading ? (
                 <ActivityIndicator color="#00C4B5" />
               ) : (
                 <View className="flex-row items-center gap-3">
-                  <ShieldCheck color="#00C4B5" size={16} opacity={0.6} />
-                  <Text variant="caption" className="text-content uppercase tracking-[0.2em] font-bold">
+                  <ShieldCheck color="#2dd4bf" size={16} />
+                  <Text variant="caption" className="uppercase tracking-[0.2em] font-bold" style={{ color: "#F5F5F7" }}>
                     Continue with Google
                   </Text>
                 </View>
@@ -420,7 +420,7 @@ export default function LoginScreen() {
               onPress={handleVerifyOtp}
               disabled={isVerifying || !isOtpFull}
               activeOpacity={0.8}
-              className={`flex-row items-center justify-center w-full rounded-sm py-5 shadow-lg mt-2 ${
+              className={`flex-row items-center justify-center w-full rounded-full py-5 shadow-lg mt-2 ${
                 !isVerifying && isOtpFull
                   ? "bg-brand-teal shadow-brand-teal/15"
                   : "bg-brand-teal/50"
@@ -431,7 +431,7 @@ export default function LoginScreen() {
               ) : (
                 <View className="flex-row items-center gap-2">
                   <ShieldCheck color="white" size={14} />
-                  <Text variant="caption" className="text-white uppercase tracking-[0.2em] font-bold">
+                  <Text variant="caption" className="text-white uppercase tracking-[0.2em] font-bold" style={{ color: "#FFFFFF" }}>
                     Verify Code
                   </Text>
                 </View>

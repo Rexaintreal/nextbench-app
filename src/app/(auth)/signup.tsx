@@ -103,7 +103,7 @@ function OtpInput({
           maxLength={i === 0 ? 6 : 1}
           textContentType="oneTimeCode"
           autoComplete={i === 0 ? "one-time-code" : "off"}
-          className="w-10 h-12 text-center text-xl font-bold border border-content-secondary/15 rounded-xl bg-surface-base text-content"
+          className="w-10 h-12 text-center text-xl font-bold border border-content-secondary/15 rounded-xl bg-surface-card text-content shadow-sm"
           style={{
             fontSize: 20,
             fontWeight: "700",
@@ -300,8 +300,8 @@ export default function SignupScreen() {
       >
         {/* Header */}
         <View className="mb-10 items-center">
-          <View className="mb-8 rounded-full bg-brand-mint/20 px-4 py-2">
-            <Text variant="caption" className="text-brand-teal uppercase tracking-widest font-bold">
+          <View className="mb-8 rounded-full bg-brand-mint/25 border border-brand-teal/30 px-4 py-2">
+            <Text variant="caption" className="text-brand-teal uppercase tracking-widest font-bold" style={{ color: "#2dd4bf" }}>
               Registration
             </Text>
           </View>
@@ -338,11 +338,12 @@ export default function SignupScreen() {
               </Text>
               <TouchableOpacity
                 onPress={() => setSchoolModalVisible(true)}
-                className="w-full bg-surface-card border border-brand-teal/10 rounded-sm py-4 px-6 shadow-sm flex-row items-center justify-between"
+                className="w-full bg-surface-card border border-brand-teal/10 rounded-2xl py-4 px-6 shadow-sm flex-row items-center justify-between"
               >
                 <Text
                   variant="label"
                   className={selectedSchool ? "text-content" : "text-content-secondary"}
+                  style={{ color: selectedSchool ? "#1A1A1C" : "#636366" }}
                 >
                   {selectedSchool || "Select Campus"}
                 </Text>
@@ -367,7 +368,7 @@ export default function SignupScreen() {
                   autoComplete="name"
                   textContentType="name"
                   editable={!isLoading}
-                  className="w-full bg-surface-base border border-content-secondary/10 rounded-sm py-4 pl-11 pr-4 text-sm font-medium text-content"
+                  className="w-full bg-surface-card border border-content-secondary/10 rounded-2xl py-4 pl-11 pr-4 text-sm font-medium text-content shadow-sm"
                 />
               </View>
             </View>
@@ -393,7 +394,7 @@ export default function SignupScreen() {
                   returnKeyType="send"
                   onSubmitEditing={handleSendOtp}
                   editable={!isLoading}
-                  className="w-full bg-surface-base border border-content-secondary/10 rounded-sm py-4 pl-11 pr-4 text-sm font-medium text-content"
+                  className="w-full bg-surface-card border border-content-secondary/10 rounded-2xl py-4 pl-11 pr-4 text-sm font-medium text-content shadow-sm"
                 />
               </View>
             </View>
@@ -433,7 +434,7 @@ export default function SignupScreen() {
               onPress={handleSendOtp}
               disabled={!agreedToTerms || isLoading || !emailInput}
               activeOpacity={0.8}
-              className={`flex-row items-center justify-center w-full rounded-sm py-5 shadow-xl ${
+              className={`flex-row items-center justify-center w-full rounded-full py-5 shadow-xl ${
                 agreedToTerms && !isLoading && emailInput
                   ? "bg-brand-pink shadow-brand-pink/10"
                   : "bg-brand-pink/50"
@@ -444,7 +445,7 @@ export default function SignupScreen() {
               ) : (
                 <View className="flex-row items-center gap-2">
                   <KeyRound color="white" size={15} />
-                  <Text variant="caption" className="text-white uppercase tracking-[0.2em] font-bold">
+                  <Text variant="caption" className="text-white uppercase tracking-[0.2em] font-bold" style={{ color: "#FFFFFF" }}>
                     Send Verification Code
                   </Text>
                 </View>
@@ -465,7 +466,7 @@ export default function SignupScreen() {
               onPress={handleGoogleSignup}
               disabled={!agreedToTerms || isLoading}
               activeOpacity={0.8}
-              className={`flex-row items-center justify-center w-full rounded-sm border border-content-secondary/20 py-5 ${
+              className={`flex-row items-center justify-center w-full rounded-full border border-white/25 bg-white/5 py-5 ${
                 !agreedToTerms || isLoading ? "opacity-50" : ""
               }`}
             >
@@ -473,8 +474,8 @@ export default function SignupScreen() {
                 <ActivityIndicator color="#00C4B5" />
               ) : (
                 <View className="flex-row items-center gap-3">
-                  <ShieldCheck color="#00C4B5" size={16} opacity={0.6} />
-                  <Text variant="caption" className="text-content uppercase tracking-[0.2em] font-bold">
+                  <ShieldCheck color="#2dd4bf" size={16} />
+                  <Text variant="caption" className="uppercase tracking-[0.2em] font-bold" style={{ color: "#F5F5F7" }}>
                     Continue with Google
                   </Text>
                 </View>
@@ -504,7 +505,7 @@ export default function SignupScreen() {
               onPress={handleVerifyOtp}
               disabled={isSigningIn || !isOtpFull}
               activeOpacity={0.8}
-              className={`flex-row items-center justify-center w-full rounded-sm py-5 shadow-lg mt-2 ${
+              className={`flex-row items-center justify-center w-full rounded-full py-5 shadow-lg mt-2 ${
                 !isSigningIn && isOtpFull ? "bg-brand-teal shadow-brand-teal/15" : "bg-brand-teal/50"
               }`}
             >
@@ -513,7 +514,7 @@ export default function SignupScreen() {
               ) : (
                 <View className="flex-row items-center gap-2">
                   <ShieldCheck color="white" size={14} />
-                  <Text variant="caption" className="text-white uppercase tracking-[0.2em] font-bold">
+                  <Text variant="caption" className="text-white uppercase tracking-[0.2em] font-bold" style={{ color: "#FFFFFF" }}>
                     Verify & Create Account
                   </Text>
                 </View>
@@ -572,31 +573,39 @@ export default function SignupScreen() {
         <View className="flex-1 justify-end bg-black/40">
           <View className="bg-surface h-[60%] rounded-t-3xl p-6">
             <View className="flex-row justify-between items-center mb-6">
-              <Text variant="h3">Select Campus</Text>
+              <Text variant="h3" style={{ color: "#1A1A1C" }}>Select Campus</Text>
               <TouchableOpacity onPress={() => setSchoolModalVisible(false)}>
-                <Text variant="label" className="text-brand-teal">
+                <Text variant="label" className="text-brand-teal" style={{ color: "#14b8a6" }}>
                   Close
                 </Text>
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              {schools.map((s) => (
-                <TouchableOpacity
-                  key={s.name}
-                  onPress={() => {
-                    setSelectedSchool(s.name);
-                    setSchoolModalVisible(false);
-                  }}
-                  className="py-4 border-b border-content-secondary/10"
-                >
-                  <Text variant="body" className="font-sans-medium">
-                    {s.name}
-                  </Text>
-                  <Text variant="caption" className="text-content-secondary mt-1">
-                    {s.city}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {schools.filter((s) => typeof s?.name === "string" && s.name.trim().length > 0).length === 0 ? (
+                <Text variant="body" className="text-content-secondary text-center py-8" style={{ color: "#636366" }}>
+                  No schools available right now.
+                </Text>
+              ) : (
+                schools
+                  .filter((s) => typeof s?.name === "string" && s.name.trim().length > 0)
+                  .map((s, index) => (
+                    <TouchableOpacity
+                      key={`${s.name}-${index}`}
+                      onPress={() => {
+                        setSelectedSchool(s.name);
+                        setSchoolModalVisible(false);
+                      }}
+                      className="py-4 border-b border-content-secondary/10"
+                    >
+                      <Text variant="body" className="font-sans-medium" style={{ color: "#1A1A1C" }}>
+                        {s.name}
+                      </Text>
+                      <Text variant="caption" className="text-content-secondary mt-1" style={{ color: "#636366" }}>
+                        {typeof s.city === "string" && s.city.trim().length > 0 ? s.city : "Lucknow"}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+              )}
             </ScrollView>
           </View>
         </View>
