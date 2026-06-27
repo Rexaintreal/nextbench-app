@@ -19,6 +19,8 @@ import {
   Modal,
   ScrollView,
   Keyboard,
+  Animated,
+  StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -50,6 +52,33 @@ const FALLBACK_SCHOOLS = [
   "Seth M.R. Jaipuria School",
   "Delhi Public School Jankipuram",
 ];
+
+// ─── Google Icon ─────────────────────────────────────────────────────────────
+
+import Svg, { Path } from "react-native-svg";
+
+function GoogleIcon({ size = 18 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+        fill="#4285F4"
+      />
+      <Path
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+        fill="#34A853"
+      />
+      <Path
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
+        fill="#FBBC05"
+      />
+      <Path
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+        fill="#EA4335"
+      />
+    </Svg>
+  );
+}
 
 // ─── OTP Input ────────────────────────────────────────────────────────────────
 
@@ -103,11 +132,14 @@ function OtpInput({
           maxLength={i === 0 ? 6 : 1}
           textContentType="oneTimeCode"
           autoComplete={i === 0 ? "one-time-code" : "off"}
-          className="w-10 h-12 text-center text-xl font-bold border border-content-secondary/15 rounded-xl bg-surface-card text-content shadow-sm"
+          className="w-10 h-12 text-center text-xl font-bold rounded-xl"
           style={{
             fontSize: 20,
             fontWeight: "700",
-            borderColor: value[i]?.trim() ? "#00C4B5" : undefined,
+            backgroundColor: "#FFFFFF0D",
+            borderWidth: 1,
+            borderColor: value[i]?.trim() ? "#00C4B5" : "#FFFFFF15",
+            color: "#FFFFFF",
             opacity: disabled ? 0.5 : 1,
           }}
           selectionColor="#00C4B5"
@@ -171,6 +203,14 @@ export default function SignupScreen() {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Per-field inline errors
+  const [fieldErrors, setFieldErrors] = useState<{
+    school?: string;
+    name?: string;
+    email?: string;
+    terms?: string;
+  }>({});
+
   const isOtpFull = otp.replace(/\s/g, "").length === 6;
 
   // Load schools
@@ -196,13 +236,16 @@ export default function SignupScreen() {
 
   // ── Send OTP ───────────────────────────────────────────────────────────────
   const handleSendOtp = async () => {
-    if (!selectedSchool) { setError("Please select your school."); return; }
-    if (!nameInput.trim()) { setError("Please enter your full name."); return; }
-    if (!emailInput.trim()) { setError("Please enter your email address."); return; }
-    if (!agreedToTerms) { setError("Please agree to the Terms of Service and Privacy Policy."); return; }
+    const errs: typeof fieldErrors = {};
+    if (!selectedSchool) errs.school = "Please select your school or institute.";
+    if (!nameInput.trim()) errs.name = "Please enter your full name.";
+    if (!emailInput.trim()) errs.email = "Please enter your email address.";
+    if (!agreedToTerms) errs.terms = "Please agree to the Terms of Service and Privacy Policy to continue.";
+    if (Object.keys(errs).length > 0) { setFieldErrors(errs); return; }
 
     Keyboard.dismiss();
     setError(null);
+    setFieldErrors({});
     setIsSendingOtp(true);
 
     try {
@@ -253,10 +296,13 @@ export default function SignupScreen() {
 
   // ── Google Signup ──────────────────────────────────────────────────────────
   const handleGoogleSignup = async () => {
-    if (!selectedSchool) { setError("Please select your school."); return; }
-    if (!agreedToTerms) { setError("Please agree to the Terms of Service and Privacy Policy."); return; }
+    const errs: typeof fieldErrors = {};
+    if (!selectedSchool) errs.school = "Please select your school or institute.";
+    if (!agreedToTerms) errs.terms = "Please agree to the Terms of Service and Privacy Policy to continue with Google.";
+    if (Object.keys(errs).length > 0) { setFieldErrors(errs); return; }
 
     setError(null);
+    setFieldErrors({});
     setIsGoogleLoading(true);
 
     try {
@@ -292,35 +338,77 @@ export default function SignupScreen() {
 
   const isLoading = isSendingOtp || isSigningIn || isGoogleLoading;
 
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(24)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
   return (
-    <SafeAreaView className="flex-1 bg-surface dark:bg-surface-dark">
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#0A0A0A" }}>
+      {/* Ambient glow blobs */}
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View style={{
+          position: "absolute", top: -40, right: -60,
+          width: 260, height: 260, borderRadius: 130,
+          backgroundColor: "#E8174A0C",
+        }} />
+        <View style={{
+          position: "absolute", top: 160, left: -80,
+          width: 200, height: 200, borderRadius: 100,
+          backgroundColor: "#00C4B50A",
+        }} />
+        <View style={{
+          position: "absolute", bottom: 80, right: "10%",
+          width: 160, height: 160, borderRadius: 80,
+          backgroundColor: "#E8174A08",
+        }} />
+      </View>
+
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: "center", paddingHorizontal: 24, paddingVertical: 40 }}
         keyboardShouldPersistTaps="handled"
       >
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
         {/* Header */}
-        <View className="mb-10 items-center">
-          <View className="mb-8 rounded-full bg-brand-mint/25 border border-brand-teal/30 px-4 py-2">
-            <Text variant="caption" className="text-brand-teal uppercase tracking-widest font-bold" style={{ color: "#2dd4bf" }}>
+        <View style={{ marginBottom: 36, alignItems: "center" }}>
+          <View style={{
+            marginBottom: 24,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: "#E8174A40",
+            backgroundColor: "#E8174A12",
+            paddingHorizontal: 16,
+            paddingVertical: 7,
+            shadowColor: "#E8174A",
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.35,
+            shadowRadius: 10,
+          }}>
+            <Text variant="caption" style={{ color: "#FF6B8A", fontWeight: "700", letterSpacing: 3, fontSize: 11, textTransform: "uppercase" }}>
               Registration
             </Text>
           </View>
-          <Text variant="h1" className="text-center text-4xl font-sans-medium mb-2">
+          <Text variant="h1" style={{ textAlign: "center", fontSize: 38, fontWeight: "600", color: "#FFFFFF", marginBottom: 8 }}>
             Join the{" "}
-            <Text variant="h1" className="italic text-brand-pink-soft text-4xl">
+            <Text variant="h1" style={{ fontStyle: "italic", color: "#E8174A", fontSize: 38 }}>
               Network
             </Text>
             .
           </Text>
-          <Text variant="caption" className="text-center text-brand-teal/50 uppercase tracking-widest font-bold">
+          <Text variant="caption" style={{ textAlign: "center", color: "#E8174A50", textTransform: "uppercase", letterSpacing: 2.5, fontWeight: "700", fontSize: 10 }}>
             Mandatory verification for all members.
           </Text>
         </View>
 
         {/* Error */}
         {error ? (
-          <View className="mb-6 w-full rounded-sm bg-error/10 p-4 border border-error/20">
-            <Text variant="caption" className="text-center text-error uppercase tracking-widest font-bold">
+          <View style={{ marginBottom: 20, width: "100%", borderRadius: 12, backgroundColor: "#FF000015", padding: 14, borderWidth: 1, borderColor: "#FF000030" }}>
+            <Text variant="caption" style={{ textAlign: "center", color: "#FF6B6B", textTransform: "uppercase", letterSpacing: 2, fontWeight: "700", fontSize: 11 }}>
               {error === "INTERNAL"
                 ? "Server Error: Could not connect to verification service"
                 : error}
@@ -330,63 +418,91 @@ export default function SignupScreen() {
 
         {/* ── Step 1: Details ── */}
         {signupStep === "details" && (
-          <View className="space-y-5">
+          <View style={{ gap: 16 }}>
             {/* School picker */}
             <View>
-              <Text variant="caption" className="uppercase tracking-widest text-brand-teal/40 font-bold mb-2 ml-1 text-[10px]">
+              <Text variant="caption" style={{ textTransform: "uppercase", letterSpacing: 2.5, color: "#FFFFFF30", fontWeight: "700", marginBottom: 8, marginLeft: 4, fontSize: 10 }}>
                 School / Institute
               </Text>
               <TouchableOpacity
-                onPress={() => setSchoolModalVisible(true)}
-                className="w-full bg-surface-card border border-brand-teal/10 rounded-2xl py-4 px-6 shadow-sm flex-row items-center justify-between"
+                onPress={() => { setSchoolModalVisible(true); setFieldErrors(e => ({ ...e, school: undefined })); }}
+                style={{
+                  width: "100%",
+                  backgroundColor: "#FFFFFF0D",
+                  borderWidth: 1,
+                  borderColor: fieldErrors.school ? "#FF6B6B60" : selectedSchool ? "#00C4B540" : "#FFFFFF15",
+                  borderRadius: 16,
+                  paddingVertical: 16,
+                  paddingHorizontal: 20,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
               >
-                <Text
-                  variant="label"
-                  className={selectedSchool ? "text-content" : "text-content-secondary"}
-                  style={{ color: selectedSchool ? "#1A1A1C" : "#636366" }}
-                >
+                <Text variant="label" style={{ color: selectedSchool ? "#FFFFFF" : "rgba(255,255,255,0.3)" }}>
                   {selectedSchool || "Select Campus"}
                 </Text>
-                <ChevronDown color="#00C4B5" size={16} opacity={0.4} />
+                <ChevronDown color="#00C4B5" size={16} opacity={0.6} />
               </TouchableOpacity>
+              {fieldErrors.school ? (
+                <Text variant="caption" style={{ color: "#FF6B6B", fontSize: 11, marginTop: 6, marginLeft: 4 }}>
+                  ⚠ {fieldErrors.school}
+                </Text>
+              ) : null}
             </View>
 
             {/* Full Name */}
             <View>
-              <Text variant="caption" className="uppercase tracking-widest text-brand-teal/40 font-bold mb-2 ml-1 text-[10px]">
+              <Text variant="caption" style={{ textTransform: "uppercase", letterSpacing: 2.5, color: "#FFFFFF30", fontWeight: "700", marginBottom: 8, marginLeft: 4, fontSize: 10 }}>
                 Full Name
               </Text>
-              <View className="relative">
-                <View className="absolute left-4 top-0 bottom-0 justify-center z-10">
-                  <User color="#00C4B5" size={15} opacity={0.5} />
+              <View style={{ position: "relative" }}>
+                <View style={{ position: "absolute", left: 16, top: 0, bottom: 0, justifyContent: "center", zIndex: 10 }}>
+                  <User color="#00C4B5" size={15} opacity={0.6} />
                 </View>
                 <TextInput
                   value={nameInput}
-                  onChangeText={setNameInput}
+                  onChangeText={(v) => { setNameInput(v); setFieldErrors(e => ({ ...e, name: undefined })); }}
                   placeholder="Jane Doe"
-                  placeholderTextColor="rgba(0,0,0,0.3)"
+                  placeholderTextColor="rgba(255,255,255,0.25)"
                   autoComplete="name"
                   textContentType="name"
                   editable={!isLoading}
-                  className="w-full bg-surface-card border border-content-secondary/10 rounded-2xl py-4 pl-11 pr-4 text-sm font-medium text-content shadow-sm"
+                  style={{
+                    width: "100%",
+                    backgroundColor: "#FFFFFF0D",
+                    borderWidth: 1,
+                    borderColor: nameInput ? "#00C4B540" : "#FFFFFF15",
+                    borderRadius: 16,
+                    paddingVertical: 16,
+                    paddingLeft: 46,
+                    paddingRight: 16,
+                    fontSize: 15,
+                    color: "#FFFFFF",
+                  }}
                 />
               </View>
+              {fieldErrors.name ? (
+                <Text variant="caption" style={{ color: "#FF6B6B", fontSize: 11, marginTop: 6, marginLeft: 4 }}>
+                  ⚠ {fieldErrors.name}
+                </Text>
+              ) : null}
             </View>
 
             {/* Email */}
             <View>
-              <Text variant="caption" className="uppercase tracking-widest text-brand-teal/40 font-bold mb-2 ml-1 text-[10px]">
+              <Text variant="caption" style={{ textTransform: "uppercase", letterSpacing: 2.5, color: "#FFFFFF30", fontWeight: "700", marginBottom: 8, marginLeft: 4, fontSize: 10 }}>
                 Email Address
               </Text>
-              <View className="relative">
-                <View className="absolute left-4 top-0 bottom-0 justify-center z-10">
-                  <Mail color="#00C4B5" size={15} opacity={0.5} />
+              <View style={{ position: "relative" }}>
+                <View style={{ position: "absolute", left: 16, top: 0, bottom: 0, justifyContent: "center", zIndex: 10 }}>
+                  <Mail color="#00C4B5" size={15} opacity={0.6} />
                 </View>
                 <TextInput
                   value={emailInput}
-                  onChangeText={setEmailInput}
+                  onChangeText={(v) => { setEmailInput(v); setFieldErrors(e => ({ ...e, email: undefined })); }}
                   placeholder="your@email.com"
-                  placeholderTextColor="rgba(0,0,0,0.3)"
+                  placeholderTextColor="rgba(255,255,255,0.25)"
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoComplete="email"
@@ -394,58 +510,92 @@ export default function SignupScreen() {
                   returnKeyType="send"
                   onSubmitEditing={handleSendOtp}
                   editable={!isLoading}
-                  className="w-full bg-surface-card border border-content-secondary/10 rounded-2xl py-4 pl-11 pr-4 text-sm font-medium text-content shadow-sm"
+                  style={{
+                    width: "100%",
+                    backgroundColor: "#FFFFFF0D",
+                    borderWidth: 1,
+                    borderColor: emailInput ? "#00C4B540" : "#FFFFFF15",
+                    borderRadius: 16,
+                    paddingVertical: 16,
+                    paddingLeft: 46,
+                    paddingRight: 16,
+                    fontSize: 15,
+                    color: "#FFFFFF",
+                  }}
                 />
               </View>
+              {fieldErrors.email ? (
+                <Text variant="caption" style={{ color: "#FF6B6B", fontSize: 11, marginTop: 6, marginLeft: 4 }}>
+                  ⚠ {fieldErrors.email}
+                </Text>
+              ) : null}
             </View>
 
             {/* Terms */}
             <TouchableOpacity
-              className="flex-row items-start pr-4"
-              onPress={() => setAgreedToTerms(!agreedToTerms)}
+              style={{ flexDirection: "row", alignItems: "center", paddingRight: 4, marginTop: 4 }}
+              onPress={() => { setAgreedToTerms(!agreedToTerms); setFieldErrors(e => ({ ...e, terms: undefined })); }}
               activeOpacity={0.8}
             >
               <View
-                className={`w-5 h-5 rounded border-2 items-center justify-center mr-3 mt-1 ${
-                  agreedToTerms
-                    ? "bg-brand-teal border-brand-teal"
-                    : "bg-surface-card border-content-secondary/20"
-                }`}
+                style={{
+                  width: 20, height: 20,
+                  borderRadius: 6,
+                  borderWidth: 2,
+                  alignItems: "center", justifyContent: "center",
+                  marginRight: 12,
+                  flexShrink: 0,
+                  backgroundColor: agreedToTerms ? "#00C4B5" : "transparent",
+                  borderColor: agreedToTerms ? "#00C4B5" : "rgba(255,255,255,0.2)",
+                }}
               >
                 {agreedToTerms && (
-                  <View className="w-2.5 h-2.5 bg-white rounded-sm" />
+                  <View style={{ width: 10, height: 10, backgroundColor: "white", borderRadius: 3 }} />
                 )}
               </View>
-              <Text variant="caption" className="text-content-secondary leading-5 flex-1">
-                I agree to Nextbench's{" "}
-                <Text variant="caption" className="text-brand-teal font-bold">
-                  Terms of Service
-                </Text>{" "}
-                and{" "}
-                <Text variant="caption" className="text-brand-teal font-bold">
-                  Privacy Policy
-                </Text>
-                . I confirm I am a currently enrolled student.
+              <Text variant="caption" style={{ lineHeight: 20, flex: 1, color: "rgba(255,255,255,0.45)", fontSize: 12 }}>
+                {"I agree to Nextbench's "}
+                <Text variant="caption" style={{ color: "#00C4B5", fontWeight: "700", fontSize: 12 }}>Terms of Service</Text>
+                {" and "}
+                <Text variant="caption" style={{ color: "#00C4B5", fontWeight: "700", fontSize: 12 }}>Privacy Policy</Text>
+                {". I confirm I am a currently enrolled student."}
               </Text>
             </TouchableOpacity>
+            {fieldErrors.terms ? (
+              <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 6, paddingHorizontal: 4 }}>
+                <Text variant="caption" style={{ color: "#FF6B6B", fontSize: 11, lineHeight: 17 }}>
+                  ⚠ {fieldErrors.terms}
+                </Text>
+              </View>
+            ) : null}
 
             {/* Send OTP button */}
             <TouchableOpacity
               onPress={handleSendOtp}
-              disabled={!agreedToTerms || isLoading || !emailInput}
-              activeOpacity={0.8}
-              className={`flex-row items-center justify-center w-full rounded-full py-5 shadow-xl ${
-                agreedToTerms && !isLoading && emailInput
-                  ? "bg-brand-pink shadow-brand-pink/10"
-                  : "bg-brand-pink/50"
-              }`}
+              disabled={isLoading}
+              activeOpacity={0.85}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "100%",
+                borderRadius: 999,
+                paddingVertical: 18,
+                backgroundColor: !isLoading ? "#E8174A" : "#E8174A60",
+                shadowColor: "#E8174A",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: !isLoading ? 0.45 : 0,
+                shadowRadius: 16,
+                elevation: 8,
+                marginTop: 4,
+              }}
             >
               {isSendingOtp ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <View className="flex-row items-center gap-2">
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <KeyRound color="white" size={15} />
-                  <Text variant="caption" className="text-white uppercase tracking-[0.2em] font-bold" style={{ color: "#FFFFFF" }}>
+                  <Text variant="caption" style={{ color: "#FFFFFF", fontWeight: "700", letterSpacing: 3, fontSize: 11, textTransform: "uppercase" }}>
                     Send Verification Code
                   </Text>
                 </View>
@@ -453,29 +603,43 @@ export default function SignupScreen() {
             </TouchableOpacity>
 
             {/* Divider */}
-            <View className="flex-row items-center py-2">
-              <View className="flex-1 h-px bg-content-secondary/10" />
-              <Text variant="caption" className="mx-4 text-content-secondary/30 uppercase tracking-widest font-bold text-[10px]">
+            <View style={{ flexDirection: "row", alignItems: "center", paddingVertical: 4 }}>
+              <View style={{ flex: 1, height: 1, backgroundColor: "#FFFFFF12" }} />
+              <Text variant="caption" style={{ marginHorizontal: 16, color: "#FFFFFF25", textTransform: "uppercase", letterSpacing: 3, fontWeight: "700", fontSize: 10 }}>
                 Or
               </Text>
-              <View className="flex-1 h-px bg-content-secondary/10" />
+              <View style={{ flex: 1, height: 1, backgroundColor: "#FFFFFF12" }} />
             </View>
 
-            {/* Google */}
+            {/* Google — white card, always tappable; validation fires on press */}
             <TouchableOpacity
               onPress={handleGoogleSignup}
-              disabled={!agreedToTerms || isLoading}
-              activeOpacity={0.8}
-              className={`flex-row items-center justify-center w-full rounded-full border border-white/25 bg-white/5 py-5 ${
-                !agreedToTerms || isLoading ? "opacity-50" : ""
-              }`}
+              disabled={isLoading}
+              activeOpacity={0.85}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "100%",
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: "rgba(255,255,255,0.15)",
+                backgroundColor: "#FFFFFF",
+                paddingVertical: 16,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 8,
+                elevation: 4,
+                opacity: isLoading ? 0.45 : 1,
+              }}
             >
               {isGoogleLoading ? (
-                <ActivityIndicator color="#00C4B5" />
+                <ActivityIndicator color="#4285F4" />
               ) : (
-                <View className="flex-row items-center gap-3">
-                  <ShieldCheck color="#2dd4bf" size={16} />
-                  <Text variant="caption" className="uppercase tracking-[0.2em] font-bold" style={{ color: "#F5F5F7" }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <GoogleIcon size={18} />
+                  <Text variant="caption" style={{ color: "#1A1A1A", fontWeight: "600", fontSize: 14, letterSpacing: 0.2 }}>
                     Continue with Google
                   </Text>
                 </View>
@@ -486,15 +650,26 @@ export default function SignupScreen() {
 
         {/* ── Step 2: OTP ── */}
         {signupStep === "otp" && (
-          <View className="space-y-6">
-            <View className="items-center mb-2">
-              <View className="w-14 h-14 bg-brand-teal/10 rounded-full items-center justify-center mb-4">
+          <View style={{ gap: 20 }}>
+            <View style={{ alignItems: "center", marginBottom: 4 }}>
+              <View style={{
+                width: 60, height: 60,
+                backgroundColor: "#00C4B515",
+                borderRadius: 30,
+                alignItems: "center", justifyContent: "center",
+                marginBottom: 16,
+                borderWidth: 1, borderColor: "#00C4B530",
+                shadowColor: "#00C4B5",
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.3,
+                shadowRadius: 12,
+              }}>
                 <Mail color="#00C4B5" size={24} />
               </View>
-              <Text variant="body" className="text-content-secondary text-center">
+              <Text variant="body" style={{ color: "#FFFFFF60", textAlign: "center" }}>
                 We've sent a 6-digit code to
               </Text>
-              <Text variant="label" className="text-content font-bold mt-1 text-center">
+              <Text variant="label" style={{ color: "#FFFFFF", fontWeight: "700", marginTop: 4, textAlign: "center" }}>
                 {emailInput}
               </Text>
             </View>
@@ -504,30 +679,42 @@ export default function SignupScreen() {
             <TouchableOpacity
               onPress={handleVerifyOtp}
               disabled={isSigningIn || !isOtpFull}
-              activeOpacity={0.8}
-              className={`flex-row items-center justify-center w-full rounded-full py-5 shadow-lg mt-2 ${
-                !isSigningIn && isOtpFull ? "bg-brand-teal shadow-brand-teal/15" : "bg-brand-teal/50"
-              }`}
+              activeOpacity={0.85}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "100%",
+                borderRadius: 999,
+                paddingVertical: 18,
+                backgroundColor: !isSigningIn && isOtpFull ? "#00C4B5" : "#00C4B550",
+                shadowColor: "#00C4B5",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: !isSigningIn && isOtpFull ? 0.5 : 0,
+                shadowRadius: 16,
+                elevation: 8,
+                marginTop: 4,
+              }}
             >
               {isSigningIn ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <View className="flex-row items-center gap-2">
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <ShieldCheck color="white" size={14} />
-                  <Text variant="caption" className="text-white uppercase tracking-[0.2em] font-bold" style={{ color: "#FFFFFF" }}>
+                  <Text variant="caption" style={{ color: "#FFFFFF", fontWeight: "700", letterSpacing: 3, fontSize: 11, textTransform: "uppercase" }}>
                     Verify & Create Account
                   </Text>
                 </View>
               )}
             </TouchableOpacity>
 
-            <View className="flex-row items-center justify-between mt-2">
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
               <TouchableOpacity
                 onPress={() => { setSignupStep("details"); setOtp("      "); setError(null); }}
-                className="flex-row items-center gap-1.5"
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
               >
-                <ArrowLeft color="rgba(0,0,0,0.4)" size={12} />
-                <Text variant="caption" className="text-content-secondary/40 uppercase tracking-widest font-bold text-[10px]">
+                <ArrowLeft color="rgba(255,255,255,0.3)" size={12} />
+                <Text variant="caption" style={{ color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: 2.5, fontWeight: "700", fontSize: 10 }}>
                   Change email
                 </Text>
               </TouchableOpacity>
@@ -536,16 +723,16 @@ export default function SignupScreen() {
                 <TouchableOpacity
                   onPress={handleSendOtp}
                   disabled={isSendingOtp}
-                  className="flex-row items-center gap-1.5"
+                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
                 >
                   <RotateCcw color="#00C4B5" size={12} />
-                  <Text variant="caption" className="text-brand-teal uppercase tracking-widest font-bold text-[10px]">
+                  <Text variant="caption" style={{ color: "#00C4B5", textTransform: "uppercase", letterSpacing: 2.5, fontWeight: "700", fontSize: 10 }}>
                     Resend code
                   </Text>
                 </TouchableOpacity>
               ) : (
-                <View className="flex-row items-center gap-1">
-                  <Text variant="caption" className="text-content-secondary/30 uppercase tracking-widest font-bold text-[10px]">
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <Text variant="caption" style={{ color: "rgba(255,255,255,0.2)", textTransform: "uppercase", letterSpacing: 2, fontWeight: "700", fontSize: 10 }}>
                     Resend in{" "}
                   </Text>
                   <Countdown key={resendKey} seconds={60} onEnd={() => setCanResend(true)} />
@@ -556,33 +743,34 @@ export default function SignupScreen() {
         )}
 
         {/* Footer */}
-        <View className="mt-10 pt-10 border-t border-content-secondary/10 flex-row justify-center items-center">
-          <Text variant="caption" className="uppercase tracking-widest text-brand-teal/40 font-bold mr-1">
+        <View style={{ marginTop: 36, paddingTop: 20, borderTopWidth: 1, borderTopColor: "#FFFFFF0A", flexDirection: "row", justifyContent: "center", alignItems: "center" }}>
+          <Text variant="caption" style={{ textTransform: "uppercase", letterSpacing: 2.5, color: "#FFFFFF30", fontWeight: "700", fontSize: 10, marginRight: 6 }}>
             Already a member?
           </Text>
           <TouchableOpacity onPress={() => router.replace("/(auth)/login")}>
-            <Text variant="caption" className="uppercase tracking-widest text-brand-teal font-bold">
+            <Text variant="caption" style={{ textTransform: "uppercase", letterSpacing: 2.5, color: "#00C4B5", fontWeight: "700", fontSize: 10 }}>
               Sign In
             </Text>
           </TouchableOpacity>
         </View>
+        </Animated.View>
       </ScrollView>
 
       {/* School Picker Modal */}
       <Modal visible={isSchoolModalVisible} animationType="slide" transparent>
-        <View className="flex-1 justify-end bg-black/40">
-          <View className="bg-surface h-[60%] rounded-t-3xl p-6">
-            <View className="flex-row justify-between items-center mb-6">
-              <Text variant="h3" style={{ color: "#1A1A1C" }}>Select Campus</Text>
-              <TouchableOpacity onPress={() => setSchoolModalVisible(false)}>
-                <Text variant="label" className="text-brand-teal" style={{ color: "#14b8a6" }}>
-                  Close
+        <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.7)" }}>
+          <View style={{ backgroundColor: "#141414", height: "62%", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, borderColor: "#FFFFFF12" }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <Text variant="h3" style={{ color: "#FFFFFF", fontWeight: "700" }}>Select Campus</Text>
+              <TouchableOpacity onPress={() => setSchoolModalVisible(false)} style={{ backgroundColor: "#FFFFFF12", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6 }}>
+                <Text variant="label" style={{ color: "#00C4B5", fontWeight: "600" }}>
+                  Done
                 </Text>
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
               {schools.filter((s) => typeof s?.name === "string" && s.name.trim().length > 0).length === 0 ? (
-                <Text variant="body" className="text-content-secondary text-center py-8" style={{ color: "#636366" }}>
+                <Text variant="body" style={{ color: "#FFFFFF40", textAlign: "center", paddingVertical: 32 }}>
                   No schools available right now.
                 </Text>
               ) : (
@@ -595,12 +783,12 @@ export default function SignupScreen() {
                         setSelectedSchool(s.name);
                         setSchoolModalVisible(false);
                       }}
-                      className="py-4 border-b border-content-secondary/10"
+                      style={{ paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: "#FFFFFF0A" }}
                     >
-                      <Text variant="body" className="font-sans-medium" style={{ color: "#1A1A1C" }}>
+                      <Text variant="body" style={{ color: "#FFFFFF", fontWeight: "500" }}>
                         {s.name}
                       </Text>
-                      <Text variant="caption" className="text-content-secondary mt-1" style={{ color: "#636366" }}>
+                      <Text variant="caption" style={{ color: "#FFFFFF40", marginTop: 2 }}>
                         {typeof s.city === "string" && s.city.trim().length > 0 ? s.city : "Lucknow"}
                       </Text>
                     </TouchableOpacity>
