@@ -11,6 +11,7 @@
 
 import auth, { FirebaseAuthTypes } from "@react-native-firebase/auth";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
+import functions from "@react-native-firebase/functions";
 
 export type FirebaseUser = FirebaseAuthTypes.User;
 
@@ -31,15 +32,15 @@ export function onAuthStateChanged(
  */
 export async function signInWithGoogle(): Promise<FirebaseAuthTypes.UserCredential> {
   console.log("Step 1: Checking Play Services...");
-  const hasServices = await GoogleSignin.hasPlayServices({ 
-    showPlayServicesUpdateDialog: true 
+  const hasServices = await GoogleSignin.hasPlayServices({
+    showPlayServicesUpdateDialog: true,
   });
   console.log("Step 1 OK - Has Play Services:", hasServices);
 
   console.log("Step 2: Calling GoogleSignin.signIn()...");
   const signInResult = await GoogleSignin.signIn();
   console.log("Step 2 OK - signInResult:", JSON.stringify(signInResult));
-  
+
   const idToken = signInResult.data?.idToken;
   console.log("Step 3: idToken exists:", !!idToken);
 
@@ -49,10 +50,11 @@ export async function signInWithGoogle(): Promise<FirebaseAuthTypes.UserCredenti
 
   console.log("Step 4: Creating Firebase credential...");
   const googleCredential = auth.GoogleAuthProvider.credential(idToken);
-  
+
   console.log("Step 5: Signing in with Firebase...");
   return auth().signInWithCredential(googleCredential);
 }
+
 /**
  * Sign out the current user.
  * Signs out from both Google and Firebase to clear cache.
@@ -80,4 +82,73 @@ export async function updateProfile(updates: {
   const user = auth().currentUser;
   if (!user) throw new Error("No authenticated user");
   return user.updateProfile(updates);
+}
+
+// ─── Email OTP ────────────────────────────────────────────────────────────────
+// These mirror the website's sendAuthOtpEmail / verifyAuthOtpEmail Cloud
+// Functions. The verify functions return { email, loginPassword } which is
+// then used with signInWithEmailAndPassword — Firebase Auth's underlying
+// mechanism behind the OTP flow.
+
+/**
+ * Step 1 — Send a 6-digit OTP to the given email.
+ * Calls the `sendAuthOtpEmail` Cloud Function.
+ */
+export async function sendOtp(email: string): Promise<void> {
+  const sendFn = functions().httpsCallable("sendAuthOtpEmail");
+  await sendFn({ email: email.trim().toLowerCase() });
+}
+
+/**
+ * Step 2 (Login) — Verify OTP and sign in to an existing account.
+ * Calls `verifyAuthOtpEmail`, gets back { email, loginPassword },
+ * then signs in with Firebase email+password.
+ */
+export async function verifyOtpAndLogin(
+  email: string,
+  otp: string
+): Promise<FirebaseAuthTypes.UserCredential> {
+  const verifyFn = functions().httpsCallable("verifyAuthOtpEmail");
+  const result: any = await verifyFn({
+    email: email.trim().toLowerCase(),
+    otp,
+  });
+
+  const { loginPassword, email: returnedEmail } = result.data ?? {};
+  if (!loginPassword || !returnedEmail) {
+    throw new Error("Authentication failed. Please try again.");
+  }
+
+  return auth().signInWithEmailAndPassword(returnedEmail, loginPassword);
+}
+
+/**
+ * Step 2 (Signup) — Verify OTP and create a new account.
+ * Same Cloud Function but passes `isSignup: true` + signupData so the
+ * function creates the Firestore user doc server-side.
+ */
+export async function verifyOtpAndSignup(
+  email: string,
+  otp: string,
+  signupData: {
+    name: string;
+    school: string;
+    city: string;
+    referralCode?: string;
+  }
+): Promise<FirebaseAuthTypes.UserCredential> {
+  const verifyFn = functions().httpsCallable("verifyAuthOtpEmail");
+  const result: any = await verifyFn({
+    email: email.trim().toLowerCase(),
+    otp,
+    isSignup: true,
+    signupData,
+  });
+
+  const { loginPassword, email: returnedEmail } = result.data ?? {};
+  if (!loginPassword || !returnedEmail) {
+    throw new Error("Authentication failed. Please try again.");
+  }
+
+  return auth().signInWithEmailAndPassword(returnedEmail, loginPassword);
 }

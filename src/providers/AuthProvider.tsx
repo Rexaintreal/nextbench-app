@@ -3,11 +3,17 @@
  *
  * Provides authentication state to the entire app via React Context.
  * Subscribes to Firebase onAuthStateChanged and Firestore user document.
+ *
+ * UPDATED: added sendOtp / verifyOtpAndLogin / verifyOtpAndSignup
+ *          for the email-OTP auth flow (mirrors the website implementation).
  */
 
 import {
   signInWithGoogle as firebaseSignInWithGoogle,
   signOut as firebaseSignOut,
+  sendOtp as firebaseSendOtp,
+  verifyOtpAndLogin as firebaseVerifyOtpAndLogin,
+  verifyOtpAndSignup as firebaseVerifyOtpAndSignup,
   onAuthStateChanged,
   type FirebaseUser,
 } from "@/services/firebase/auth";
@@ -21,7 +27,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { boolean } from "zod";
 
 export interface UserData {
   id: string;
@@ -47,18 +52,24 @@ export interface UserData {
 }
 
 interface AuthContextValue {
-  /** The current Firebase user, or null if not signed in */
   user: FirebaseUser | null;
-  /** The Firestore user document */
   userData: UserData | null;
-  /** True while the initial auth state and doc is being determined */
   isLoading: boolean;
-  /** Convenience: true if user is non-null */
   isAuthenticated: boolean;
-  /** Sign in with Google */
+  /** Google OAuth (existing) */
   signInWithGoogle: () => Promise<any>;
   /** Sign out */
   signOut: () => Promise<void>;
+  /** Email OTP — Step 1: send code */
+  sendOtp: (email: string) => Promise<void>;
+  /** Email OTP — Step 2: verify + sign in (login flow) */
+  verifyOtpAndLogin: (email: string, otp: string) => Promise<any>;
+  /** Email OTP — Step 2: verify + create account (signup flow) */
+  verifyOtpAndSignup: (
+    email: string,
+    otp: string,
+    signupData: { name: string; school: string; city: string; referralCode?: string }
+  ) => Promise<any>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -70,14 +81,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Configure GoogleSignin on mount
   useEffect(() => {
-    console.log("WebClientId:", process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
     GoogleSignin.configure({
       webClientId: "14134258818-untrtrmtl4u95f0jga661nookhdls37f.apps.googleusercontent.com",
       iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     });
   }, []);
 
-  // Subscribe to auth state changes and Firestore document
+  // Subscribe to auth state + Firestore user doc
   useEffect(() => {
     let unsubscribeDoc: (() => void) | undefined;
 
@@ -85,7 +95,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(firebaseUser);
 
       if (firebaseUser) {
-        // Subscribe to Firestore user doc
         unsubscribeDoc = subscribeToDocument<UserData>(
           "users",
           firebaseUser.uid,
@@ -107,22 +116,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signInWithGoogle = async () => {
-    return firebaseSignInWithGoogle();
-  };
-
-  const signOut = async () => {
-    await firebaseSignOut();
-  };
-
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       userData,
       isLoading,
       isAuthenticated: user !== null,
-      signInWithGoogle,
-      signOut,
+      signInWithGoogle: firebaseSignInWithGoogle,
+      signOut: firebaseSignOut,
+      sendOtp: firebaseSendOtp,
+      verifyOtpAndLogin: firebaseVerifyOtpAndLogin,
+      verifyOtpAndSignup: firebaseVerifyOtpAndSignup,
     }),
     [user, userData, isLoading]
   );
