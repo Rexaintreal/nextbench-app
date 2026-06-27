@@ -11,9 +11,13 @@
 
 import auth, { FirebaseAuthTypes } from "@react-native-firebase/auth";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
-import functions from "@react-native-firebase/functions";
+import { getApp } from "@react-native-firebase/app";
+import { getFunctions, httpsCallable } from "@react-native-firebase/functions";
 
 export type FirebaseUser = FirebaseAuthTypes.User;
+
+// Modular Functions instance, created once and reused by every callable below.
+const functionsInstance = getFunctions(getApp());
 
 /**
  * Subscribe to auth state changes.
@@ -95,7 +99,7 @@ export async function updateProfile(updates: {
  * Calls the `sendAuthOtpEmail` Cloud Function.
  */
 export async function sendOtp(email: string): Promise<void> {
-  const sendFn = functions().httpsCallable("sendAuthOtpEmail");
+  const sendFn = httpsCallable(functionsInstance, "sendAuthOtpEmail");
   await sendFn({ email: email.trim().toLowerCase() });
 }
 
@@ -108,7 +112,7 @@ export async function verifyOtpAndLogin(
   email: string,
   otp: string
 ): Promise<FirebaseAuthTypes.UserCredential> {
-  const verifyFn = functions().httpsCallable("verifyAuthOtpEmail");
+  const verifyFn = httpsCallable(functionsInstance, "verifyAuthOtpEmail");
   const result: any = await verifyFn({
     email: email.trim().toLowerCase(),
     otp,
@@ -137,7 +141,7 @@ export async function verifyOtpAndSignup(
     referralCode?: string;
   }
 ): Promise<FirebaseAuthTypes.UserCredential> {
-  const verifyFn = functions().httpsCallable("verifyAuthOtpEmail");
+  const verifyFn = httpsCallable(functionsInstance, "verifyAuthOtpEmail");
   const result: any = await verifyFn({
     email: email.trim().toLowerCase(),
     otp,
