@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Modal, Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { Text } from "@/components/ui/Text";
 import { useAuth } from "@/providers/AuthProvider";
@@ -319,9 +320,12 @@ export default function ProfileScreen() {
           {userData.coverPhoto ? (
             <Image source={{ uri: userData.coverPhoto }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
           ) : (
-            <View style={{ flex: 1, backgroundColor: isDark ? "#0D3D38" : "#CCFBF1" }}>
-              <View style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: "50%", backgroundColor: isDark ? "rgba(244,63,94,0.15)" : "rgba(244,63,94,0.10)" }} />
-            </View>
+            <LinearGradient
+              colors={isDark ? ["#0D3D38", "#3D1A28"] : ["#CCFBF1", "#FBD9E2"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={{ flex: 1 }}
+            />
           )}
           {/* Edit pill */}
           <TouchableOpacity
