@@ -993,8 +993,8 @@ function ChatBody({
     <>
       <ImageBackground
         source={isDark
-          ? require('../../../assets/images/chatbackground.png')
-          : require('../../../assets/images/chatbackgroundLight.png')}
+          ? require('../../../assets/images/dark.png')
+          : require('../../../assets/images/light.png')}
         style={{ flex: 1, width: '100%', height: '100%' }}
         imageStyle={{ resizeMode: "repeat" }}
       >
