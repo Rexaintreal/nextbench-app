@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { View, FlatList, RefreshControl, TouchableOpacity, Image, Alert, ScrollView, Animated } from "react-native";
+import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from "react";
+import { View, FlatList, RefreshControl, TouchableOpacity, Image, Alert, ScrollView, Animated, AppState } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Text } from "@/components/ui/Text";
@@ -18,6 +18,10 @@ type FeedItem =
   | { type: 'post'; data: Post & { feedScore?: number }; timestamp: number }
   | { type: 'product'; data: Product; timestamp: number };
 
+// Outside component — memo() must never be called inside a render cycle
+const MemoPostCard = memo(PostCard);
+const MemoProductCard = memo(ProductCard);
+
 export default function FeedScreen() {
   const { user, userData } = useAuth();
   const { followingIds } = useFollowingIds();
@@ -32,10 +36,14 @@ export default function FeedScreen() {
   const [upvotedPostIds, setUpvotedPostIds] = useState<Set<string>>(new Set());
   const [wishlistedIds, setWishlistedIds] = useState<Set<string>>(new Set());
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
+  // Tracks posts whose debounce timer is still pending — used to disable the
+  // like button so tapping again doesn't queue a second Firestore write
+  const [pendingUpvoteIds, setPendingUpvoteIds] = useState<Set<string>>(new Set());
 
   const [contentType, setContentType] = useState<'all' | 'posts' | 'marketplace' | 'for-you'>('all');
   const { colorScheme, isDark, toggleTheme } = useTheme();
   const [optimisticUpvotes, setOptimisticUpvotes] = useState<Record<string, { liked: boolean; count: number }>>({});
+  const optimisticUpvotesRef = useRef<Record<string, { liked: boolean; count: number }>>({});
   const upvoteSyncRefs = useRef<Record<string, { timer: ReturnType<typeof setTimeout> | null; baseline: boolean }>>({});
   const flatListRef = useRef<FlatList>(null);
   const insets = useSafeAreaInsets();
@@ -169,7 +177,16 @@ export default function FeedScreen() {
   }, [user]);
 
   useEffect(() => {
+    // Keep ref in sync so handleUpvote always reads fresh optimistic state
+    optimisticUpvotesRef.current = optimisticUpvotes;
+  }, [optimisticUpvotes]);
+
+  useEffect(() => {
+    // Skip entirely when nothing in-flight — avoids a state update on every
+    // Firestore upvote snapshot during normal scrolling
+    if (Object.keys(optimisticUpvotesRef.current).length === 0) return;
     setOptimisticUpvotes(prev => {
+      if (Object.keys(prev).length === 0) return prev;
       let changed = false;
       const next = { ...prev };
       for (const postId of Object.keys(prev)) {
@@ -352,21 +369,9 @@ export default function FeedScreen() {
         }).start();
       }
     } else {
-      // No new IDs — just update existing items in-place (upvote counts, etc.)
-      // This makes realtime upvote/reply count changes visible without disrupting scroll position
-      const feedDataById = new Map(feedItems.map(i => [`${i.type}-${i.data.id}`, i]));
-      setCommittedFeedItems(prev => {
-        let changed = false;
-        const next = prev.map(item => {
-          const updated = feedDataById.get(`${item.type}-${item.data.id}`);
-          if (updated && JSON.stringify(updated.data) !== JSON.stringify(item.data)) {
-            changed = true;
-            return updated;
-          }
-          return item;
-        });
-        return changed ? next : prev;
-      });
+      // No new IDs — counts may have changed (upvotes/replies) but the optimistic
+      // layer already reflects them instantly. Avoid JSON.stringify-ing every feed
+      // item on every Firestore snapshot — that was the main source of tap lag.
     }
   }, [feedItems, contentType, loadingPosts, loadingProducts]);
 
@@ -402,12 +407,46 @@ export default function FeedScreen() {
     setTimeout(() => setRefreshing(false), 400);
   }, [feedItems, pillAnim]);
 
-  const handleUpvote = (post: Post) => {
-    if (!user) { Alert.alert('Sign In Required', 'You need to sign in to upvote posts.'); return; }
+  // Keep a stable ref to the latest onRefresh so the AppState listener below
+  // never needs to re-subscribe when feedItems/pillAnim change
+  const onRefreshRef = useRef(onRefresh);
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
+
+  // Refresh the feed whenever the app returns to the foreground — covers both
+  // a fresh launch and resuming from the background/app switcher
+  const appStateRef = useRef(AppState.currentState);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const cameFromBackground = appStateRef.current.match(/inactive|background/);
+      if (cameFromBackground && nextState === 'active') {
+        onRefreshRef.current();
+      }
+      appStateRef.current = nextState;
+    });
+    return () => subscription.remove();
+  }, []);
+
+  // Stable ref so the useCallback below never needs optimisticUpvotes/upvotedPostIds
+  // in its dep array — those are read from refs at call time instead
+  const upvotedPostIdsRef = useRef(upvotedPostIds);
+  useEffect(() => { upvotedPostIdsRef.current = upvotedPostIds; }, [upvotedPostIds]);
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
+
+  const handleUpvote = useCallback((post: Post) => {
+    const currentUser = userRef.current;
+    if (!currentUser) { Alert.alert('Sign In Required', 'You need to sign in to upvote posts.'); return; }
 
     const postId = post.id;
-    const existing = optimisticUpvotes[postId];
-    const baseline = upvotedPostIds.has(postId);
+
+    // Mark as pending immediately to disable the button and prevent spam
+    setPendingUpvoteIds(prev => new Set(prev).add(postId));
+
+    // Read fresh values from refs — no stale closure issues
+    const existing = optimisticUpvotesRef.current[postId];
+    const baseline = upvotedPostIdsRef.current.has(postId);
     const current = existing ? existing.liked : baseline;
     const next = !current;
     const baseCount = existing ? existing.count : (post.upvotesCount || 0);
@@ -432,51 +471,58 @@ export default function FeedScreen() {
           delete copy[postId];
           return copy;
         });
-        return;
+      } else {
+        try {
+          await toggleUpvote(postId, currentUser.uid);
+        } catch (err) {
+          console.error('Upvote error:', err);
+          setOptimisticUpvotes(prev => {
+            const copy = { ...prev };
+            delete copy[postId];
+            return copy;
+          });
+        }
       }
-      try {
-        await toggleUpvote(postId, user.uid);
-      } catch (err) {
-        console.error('Upvote error:', err);
-        setOptimisticUpvotes(prev => {
-          const copy = { ...prev };
-          delete copy[postId];
-          return copy;
-        });
-      }
+      // Clear pending regardless of outcome so button re-enables
+      setPendingUpvoteIds(prev => {
+        const next = new Set(prev);
+        next.delete(postId);
+        return next;
+      });
     }, 400);
-  };
+  }, []); // stable forever — reads all live values via refs
 
-  const handleToggleWishlist = async (product: Product) => {
+  const handleToggleWishlist = useCallback(async (product: Product) => {
     if (!user) { Alert.alert('Sign In Required', 'You need to sign in to save items.'); return; }
     try { await toggleWishlist(product.id, user.uid); } catch (err) { console.error('Wishlist error:', err); }
-  };
+  }, [user]);
 
-  const handleToggleSavePost = async (post: Post) => {
+  const handleToggleSavePost = useCallback(async (post: Post) => {
     if (!user) { Alert.alert('Sign In Required', 'You need to sign in to save posts.'); return; }
     try { await toggleSavePost(post.id, user.uid); } catch (err) { console.error('Save post error:', err); }
-  };
+  }, [user]);
 
-  const renderItem = ({ item }: { item: FeedItem }) => {
+  const renderItem = useCallback(({ item }: { item: FeedItem }) => {
     if (item.type === 'post') {
       const opt = optimisticUpvotes[item.data.id];
       const displayHasUpvoted = opt ? opt.liked : upvotedPostIds.has(item.data.id);
       const displayUpvotesCount = opt ? opt.count : (item.data.upvotesCount || 0);
+      const upvoteDisabled = pendingUpvoteIds.has(item.data.id);
 
       return (
-        <PostCard
+        <MemoPostCard
           post={{ ...item.data, upvotesCount: displayUpvotesCount }}
           hasUpvoted={displayHasUpvoted}
           isSaved={savedPostIds.has(item.data.id)}
           onPress={() => router.push(`/post/${item.data.id}` as any)}
-          onUpvote={() => handleUpvote(item.data)}
+          onUpvote={() => !upvoteDisabled && handleUpvote(item.data)}
           onToggleSave={() => handleToggleSavePost(item.data)}
           onAuthorPress={() => router.push(`/profile/${item.data.authorId}` as any)}
         />
       );
     } else {
       return (
-        <ProductCard
+        <MemoProductCard
           product={item.data}
           isWishlisted={wishlistedIds.has(item.data.id)}
           onPress={() => router.push(`/product/${item.data.id}` as any)}
@@ -485,7 +531,7 @@ export default function FeedScreen() {
         />
       );
     }
-  };
+  }, [optimisticUpvotes, upvotedPostIds, savedPostIds, wishlistedIds, pendingUpvoteIds, handleUpvote, handleToggleSavePost, handleToggleWishlist]);
 
   const isLoading = loadingPosts || loadingProducts;
   const iconColor = isDark ? '#F5F5F7' : '#1A1A1C';
