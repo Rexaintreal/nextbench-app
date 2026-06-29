@@ -113,6 +113,7 @@ export default function PostDetailScreen() {
   const borderClr      = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
   const iconColor      = isDark ? "#F5F5F7" : "#1A1A1C";
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'top'>('newest');
+  const isSendingRef = useRef(false);
 
   // Deep-link to a specific comment (from a "new_reply" notification)
   const commentRefs = useRef<Record<string, View | null>>({});
@@ -404,12 +405,23 @@ export default function PostDetailScreen() {
     const hasText = newComment.trim().length > 0;
     const hasImage = !!selectedImage;
     if ((!hasText && !hasImage) || !user || !userData || !id) return;
+    if (isSendingRef.current) return;
 
+    isSendingRef.current = true;
     setSending(true);
+    const commentText = newComment.trim();
+    const commentImage = selectedImage;
+    const commentReplyingTo = replyingTo;
+
+    setNewComment("");
+    setSelectedImage(null);
+    setReplyingTo(null);
+    Keyboard.dismiss();
+
     try {
       let imageUrl: string | null = null;
-      if (selectedImage) {
-        imageUrl = await uploadImage(selectedImage);
+      if (commentImage) {
+        imageUrl = await uploadImage(commentImage);
       }
 
       const replyData: any = {
@@ -418,29 +430,26 @@ export default function PostDetailScreen() {
         authorName: userData.name || "Unknown",
         authorSchool: userData.school || "",
         authorProfilePicture: userData.profilePicture || null,
-        content: newComment.trim(),
+        content: commentText,
         imageUrl: imageUrl,
         upvotesCount: 0,
         repliesCount: 0,
         createdAt: firestore.FieldValue.serverTimestamp(),
         updatedAt: firestore.FieldValue.serverTimestamp(),
       };
-      if (replyingTo) replyData.parentId = replyingTo.id;
+      if (commentReplyingTo) replyData.parentId = commentReplyingTo.id;
 
       const newReplyRef = await firestore().collection("post_replies").add(replyData);
       await firestore().collection("posts").doc(id).update({
         repliesCount: firestore.FieldValue.increment(1),
       });
-      if (replyingTo) {
-        await firestore().collection("post_replies").doc(replyingTo.id).update({
+      if (commentReplyingTo) {
+        await firestore().collection("post_replies").doc(commentReplyingTo.id).update({
           repliesCount: firestore.FieldValue.increment(1),
         });
       }
 
-      // Notify the right recipient — the comment author if this is a nested
-      // reply, otherwise the post author for a top-level comment. Fire-and-forget;
-      // notifications are non-critical and shouldn't block the UI on failure.
-      const recipientUserId = replyingTo ? replyingTo.authorId : post?.authorId;
+      const recipientUserId = commentReplyingTo ? commentReplyingTo.authorId : post?.authorId;
       if (recipientUserId) {
         notifyOnReply({
           recipientUserId,
@@ -448,19 +457,20 @@ export default function PostDetailScreen() {
           actorName: userData.name || "Unknown",
           postId: id,
           replyId: newReplyRef.id,
-          isReplyToComment: !!replyingTo,
+          isReplyToComment: !!commentReplyingTo,
           contentPreview: replyData.content,
         }).catch((err) => console.warn("notifyOnReply failed:", err));
       }
 
-      setNewComment("");
-      setSelectedImage(null);
-      setReplyingTo(null);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
     } catch (err) {
       console.error("Comment error:", err);
+      setNewComment(commentText);
+      setSelectedImage(commentImage);
+      setReplyingTo(commentReplyingTo);
     } finally {
       setSending(false);
+      isSendingRef.current = false;
     }
   };
 

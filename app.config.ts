@@ -4,7 +4,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "NextBench",
   slug: "nextbench",
-  version: "1.0.5",
+  version: "1.0.6",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: "nextbench",
